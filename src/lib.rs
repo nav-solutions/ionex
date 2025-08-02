@@ -17,9 +17,6 @@
 
 extern crate num_derive;
 
-#[macro_use]
-extern crate lazy_static;
-
 #[cfg(feature = "serde")]
 #[macro_use]
 extern crate serde;
@@ -42,13 +39,14 @@ pub mod tec;
 pub mod version;
 
 mod epoch;
+mod formatting;
 mod ionosphere;
+mod parsing;
 
 #[cfg(test)]
 mod tests;
 
 use std::{
-    collections::HashMap,
     fs::File,
     io::{BufReader, BufWriter, Read, Write},
     path::Path,
@@ -67,10 +65,13 @@ use std::collections::BTreeMap;
 use hifitime::prelude::Epoch;
 
 use crate::{
-    epoch::epoch_decompose,
     error::{FormattingError, ParsingError},
+    formatting::format_record,
     header::Header,
-    production::ProductionAttributes,
+    key::Key,
+    parsing::parse_record,
+    production::{ProductionAttributes, Region},
+    tec::TEC,
 };
 
 pub mod prelude {
@@ -167,8 +168,8 @@ pub struct IONEX {
 
 impl IONEX {
     /// Builds a new [IONEX] struct from given header & body sections.
-    pub fn new(header: Header, record: record::Record) -> Rinex {
-        Rinex {
+    pub fn new(header: Header, record: Record) -> Self {
+        Self {
             header,
             record,
             production: None,
@@ -227,8 +228,8 @@ impl IONEX {
     }
 
     /// Returns Total Electron Content ([TEC]) Iterator
-    pub fn tec_maps_iter(&self) -> Box<dyn Iterator<Item = (IonexKey, &TEC)> + '_> {
-        self.record.iter()
+    pub fn tec_maps_iter(&self) -> Box<dyn Iterator<Item = (&Key, &TEC)> + '_> {
+        Box::new(self.record.iter())
     }
 
     /// Returns a file name that would describe [Self] according to the
@@ -236,15 +237,15 @@ impl IONEX {
     pub fn standardized_filename(&self) -> String {
         let header = &self.header;
 
-        let (agency, region, year, doy) = if let Some(producution) = self.production {
+        let (agency, region, year, doy) = if let Some(production) = &self.production {
             (
-                production.agency,
+                production.agency.clone(),
                 production.region,
                 production.year - 2000,
                 production.doy,
             )
         } else {
-            ("XXX", 'G', 0, 0)
+            ("XXX".to_string(), Region::default(), 0, 0)
         };
 
         let extension = if let Some(production) = &self.production {
@@ -272,19 +273,15 @@ impl IONEX {
 
         let first_epoch = self.first_epoch()?;
 
-        match first_epoch.to_gregorian_utc() {
-            Some((y, _, _, _, _, _, _)) => attributes.year = y as u32,
-            _ => {},
-        }
-
+        let year = first_epoch.year();
         let doy = first_epoch.day_of_year().round() as u32;
 
         let region = Region::Global; // TODO: study the grid specs
 
         Some(ProductionAttributes {
             doy,
-            year,
             region,
+            year: year as u32,
             agency: agency.to_string(),
 
             #[cfg(feature = "flate2")]
@@ -305,7 +302,7 @@ impl IONEX {
 
         // Parse record (=consumes rest of this resource)
         // Comments are preserved and store "as is"
-        let (record, comments) = Record::parse(&mut header, reader)?;
+        let (record, comments) = parse_record(&mut header, reader)?;
 
         Ok(Self {
             header,
@@ -320,7 +317,7 @@ impl IONEX {
     /// in [Header] section. This is the mirror operation of [Self::parse].
     pub fn format<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), FormattingError> {
         self.header.format(writer)?;
-        self.record.format(writer, &self.header)?;
+        format_record(writer, &self.record, &self.header)?;
         writer.flush()?;
         Ok(())
     }
@@ -440,8 +437,10 @@ impl IONEX {
         let reader = GzDecoder::new(fd);
         let mut reader = BufReader::new(reader);
         let mut ionex = Self::parse(&mut reader)?;
+
         ionex.production = file_attributes;
-        Ok(rinex)
+
+        Ok(ionex)
     }
 
     /// Dumps and gzip encodes [IONEX] into writable local file,

@@ -23,7 +23,7 @@ impl QuantizedCoordinates {
     pub fn from_decimal_degrees(lat: f64, long: f64, alt_km: f64) -> Self {
         Self {
             lat_ddeg: Quantized::new_auto_scaled(lat),
-            long_ddeg: Quantized::new_auto_scaled(lat),
+            long_ddeg: Quantized::new_auto_scaled(long),
             alt_km: Quantized::new_auto_scaled(alt_km),
         }
     }
@@ -60,7 +60,7 @@ impl QuantizedCoordinates {
 
     /// Returns latitude in degrees
     pub fn latitude_ddeg(&self) -> f64 {
-        self.latitude.real_value_f64()
+        self.lat_ddeg.real_value_f64()
     }
 
     /// Returns latitude in radians
@@ -70,7 +70,7 @@ impl QuantizedCoordinates {
 
     /// Returns longitude in degrees
     pub fn longitude_ddeg(&self) -> f64 {
-        self.longitude.real_value_f64()
+        self.long_ddeg.real_value_f64()
     }
 
     /// Returns longitude in radians
@@ -80,7 +80,7 @@ impl QuantizedCoordinates {
 
     /// Returns longitude in kilometers
     pub fn altitude_km(&self) -> f64 {
-        self.altitude.real_value_f64()
+        self.alt_km.real_value_f64()
     }
 }
 

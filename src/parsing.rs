@@ -1,20 +1,19 @@
 use crate::{
-    prelude::{
-        Epoch, ParsingError, Key, Quantized, QuantizedCoordinates,
-        Record, TEC,
-    },
     error::ParsingError,
+    prelude::{Comments, Epoch, Header, Key, Quantized, QuantizedCoordinates, Record, TEC},
 };
 
-pub fn is_new_tec_map(line: &str) -> bool {
+use std::io::{BufRead, BufReader, Read};
+
+fn is_new_tec_map(line: &str) -> bool {
     line.contains("START OF TEC MAP")
 }
 
-pub fn is_new_rms_map(line: &str) -> bool {
+fn is_new_rms_map(line: &str) -> bool {
     line.contains("START OF RMS MAP")
 }
 
-pub fn is_new_height_map(line: &str) -> bool {
+fn is_new_height_map(line: &str) -> bool {
     line.contains("START OF HEIGHT MAP")
 }
 
@@ -29,14 +28,14 @@ fn parse_grid_specs(line: &str) -> Result<(f64, f64, f64, f64), ParsingError> {
     let fixed_lat = fixed_lat
         .trim()
         .parse::<f64>()
-        .map_err(|_| ParsingError::IonexGridCoordinates)?;
+        .map_err(|_| ParsingError::GridCoordinates)?;
 
     let (long1, rem) = rem.split_at(6);
 
     let long1 = long1
         .trim()
         .parse::<f64>()
-        .map_err(|_| ParsingError::IonexGridCoordinates)?;
+        .map_err(|_| ParsingError::GridCoordinates)?;
 
     // lon2 field is not used, we iterate using spacing starting @long1
     let (_, rem) = rem.split_at(6);
@@ -46,14 +45,14 @@ fn parse_grid_specs(line: &str) -> Result<(f64, f64, f64, f64), ParsingError> {
     let long_spacing = long_spacing
         .trim()
         .parse::<f64>()
-        .map_err(|_| ParsingError::IonexGridCoordinates)?;
+        .map_err(|_| ParsingError::GridCoordinates)?;
 
     let (fixed_alt, _) = rem.split_at(6);
 
     let fixed_alt = fixed_alt
         .trim()
         .parse::<f64>()
-        .map_err(|_| ParsingError::IonexGridCoordinates)?;
+        .map_err(|_| ParsingError::GridCoordinates)?;
 
     return Ok((fixed_lat, long1, long_spacing, fixed_alt));
 }
@@ -66,7 +65,7 @@ fn parse_grid_specs(line: &str) -> Result<(f64, f64, f64, f64), ParsingError> {
 ///   - long_exponent: deduced from IONEX header for coordinates quantization
 ///   - tec_exponent: kept up to date, for correct data interpretation
 ///   - epoch: kept up to date, for correct classification
-pub fn parse_tec_map(
+fn parse_tec_map(
     content: &str,
     lat_exponent: i8,
     long_exponent: i8,
@@ -95,14 +94,11 @@ pub fn parse_tec_map(
             if marker.contains("EXPONENT") {
                 // should not have been presented (handled @ higher level)
                 continue; // avoid parsing
-
             } else if marker.contains("EPOCH OF CURRENT MAP") {
                 // should not have been presented (handled @ higher level)
                 continue; // avoid parsing
-
             } else if marker.contains("START OF") {
                 continue; // avoid parsing
-
             } else if marker.contains("LAT/LON1/LON2/DLON/H") {
                 // grid specs (to follow)
                 (fixed_lat, long1, long_spacing, fixed_alt) = parse_grid_specs(content)?;
@@ -136,7 +132,7 @@ pub fn parse_tec_map(
                         quantized_alt,
                     );
 
-                    let key = IonexKey { epoch, coordinates };
+                    let key = Key { epoch, coordinates };
 
                     record.insert(key, tec);
                 }
@@ -156,7 +152,7 @@ pub fn parse_tec_map(
 ///   - long_exponent: deduced from IONEX header for coordinates quantization
 ///   - tec_exponent: kept up to date, for correct data interpretation
 ///   - epoch: epoch of current map
-pub fn parse_rms_map(
+fn parse_rms_map(
     content: &str,
     lat_exponent: i8,
     long_exponent: i8,
@@ -213,7 +209,7 @@ pub fn parse_rms_map(
                     );
 
                     // we only augment previously parsed TEC values
-                    let key = IonexKey { epoch, coordinates };
+                    let key = Key { epoch, coordinates };
                     if let Some(v) = record.get_mut(&key) {
                         v.set_quantized_rms(rms_tecu, tec_exponent);
                     }
@@ -275,6 +271,13 @@ pub fn parse_rms_map(
 //     Ok(())
 // }
 
+pub(crate) fn parse_record<R: Read>(
+    header: &mut Header,
+    reader: &mut BufReader<R>,
+) -> Result<(Record, Comments), ParsingError> {
+    Ok((Default::default(), Default::default()))
+}
+
 #[cfg(test)]
 mod test {
     use super::{
@@ -283,7 +286,7 @@ mod test {
     };
 
     use crate::{
-        ionex::{IonexKey, QuantizedCoordinates, Record},
+        ionex::{Key, QuantizedCoordinates, Record},
         prelude::Epoch,
     };
 
@@ -643,7 +646,7 @@ mod test {
                 363,
             ),
         ] {
-            let key = IonexKey { epoch, coordinates };
+            let key = Key { epoch, coordinates };
 
             let tec = record
                 .get(&key)

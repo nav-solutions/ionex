@@ -10,10 +10,10 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Quantized {
     /// Exponent (scaling)
-    exponent: i8,
+    pub(crate) exponent: i8,
 
     /// Quantized value
-    quantized: i64,
+    pub(crate) quantized: i64,
 }
 
 impl Quantized {

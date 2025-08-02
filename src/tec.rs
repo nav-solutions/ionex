@@ -75,7 +75,7 @@ impl TEC {
     }
 
     /// Returns TEC Root Mean Square (if determined).
-    pub fn tec_root_mean_square(&self) -> Option<f64> {
+    pub fn root_mean_square(&self) -> Option<f64> {
         let rms = self.rms?;
         Some(rms.real_value_f64())
     }

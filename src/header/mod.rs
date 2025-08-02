@@ -1,4 +1,3 @@
-/// IONEX specific header fields
 mod parsing;
 
 #[cfg(feature = "serde")]
@@ -8,19 +7,33 @@ use crate::{
     fmt_ionex,
     linspace::Linspace,
     prelude::{
-        BiasSource, Comments, Epoch, FormattingError, Grid, MappingFunction, ReferenceSystem,
+        BiasSource, Comments, Duration, Epoch, FormattingError, Grid, MappingFunction,
+        ReferenceSystem, Version,
     },
 };
 
-use std::{
-    collections::HashMap,
-    io::{BufWriter, Write},
-};
+use std::io::{BufWriter, Write};
 
-/// IONEX specific [HeaderFields]
+/// IONEX file [Header]
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Header {
+    /// File [Version]
+    pub version: Version,
+
+    /// Name of production software
+    pub program: Option<String>,
+
+    /// Name of operator (usually agency in IONEX)
+    /// running this software
+    pub run_by: Option<String>,
+
+    /// Product date and time as readable string
+    pub date: Option<String>,
+
+    /// Possible file license
+    pub license: Option<String>,
+
     /// Total number of TEC maps
     pub number_of_maps: usize,
 
@@ -41,13 +54,13 @@ pub struct Header {
 
     /// Mapping function adopted for TEC determination,
     /// if None: No mapping function, e.g altimetry
-    pub mapf: Option<MappingFunction>,
+    pub mapf: MappingFunction,
 
     /// Maps dimension, can either be a 2D (= fixed altitude mode), or 3D
     pub map_dimension: u8,
 
-    /// Mean earth radius or bottom of height grid, in km.
-    pub base_radius: f32,
+    /// Mean earth radius or bottom of height grid, in kilometers.
+    pub base_radius_km: f32,
 
     /// Sampling period, duration gap between two maps.
     pub sampling_period: Duration,
@@ -75,19 +88,22 @@ impl Default for Header {
             number_of_maps: 0,
             // 2D by default
             map_dimension: 2,
-            mapping: None,
-            observables: None,
-            description: None,
+            mapf: Default::default(),
+            comments: Default::default(),
+            description: Default::default(),
             elevation_cutoff: 0.0,
             // Standard Earth radius [km]
-            base_radius: 6371.0,
+            base_radius_km: 6371.0,
             grid: Grid::default(),
-            nb_stations: 0,
-            nb_satellites: 0,
-            dcbs: HashMap::new(),
             epoch_of_last_map: Epoch::default(),
             epoch_of_first_map: Epoch::default(),
+            sampling_period: Duration::from_hours(1.0),
             reference_system: ReferenceSystem::default(),
+            version: Default::default(),
+            program: Default::default(),
+            run_by: Default::default(),
+            date: Default::default(),
+            license: Default::default(),
         }
     }
 }
@@ -103,9 +119,9 @@ impl Header {
 
         // altitude grid
         let (start, end, spacing) = (
-            self.grid.height.start,
-            self.grid.height.end,
-            self.grid.height.spacing,
+            self.grid.altitude.start,
+            self.grid.altitude.end,
+            self.grid.altitude.spacing,
         );
 
         writeln!(
@@ -157,15 +173,11 @@ impl Header {
         )?;
 
         // mapping function
-        if let Some(map_f) = &self.mapping {
-            writeln!(
-                w,
-                "{}",
-                fmt_ionex(&format!("{:?}", map_f), "MAPPING FUNCTION")
-            )?;
-        } else {
-            writeln!(w, "{}", fmt_ionex("NONE", "MAPPING FUNCTION"))?;
-        }
+        writeln!(
+            w,
+            "{}",
+            fmt_ionex(&format!("{}", self.mapf), "MAPPING FUNCTION")
+        )?;
 
         // time of first map
         writeln!(w, "{}", fmt_ionex("TODO", "EPOCH OF FIRST MAP"))?;
@@ -223,9 +235,10 @@ impl Header {
         s
     }
 
-    pub fn with_mapping_function(&self, mf: MappingFunction) -> Self {
+    /// Copies and returns new [Header] with updated [MappingFunction];
+    pub fn with_mapping_function(&self, mapf: MappingFunction) -> Self {
         let mut s = self.clone();
-        s.mapping = Some(mf);
+        s.mapf = mapf;
         s
     }
 
@@ -236,44 +249,16 @@ impl Header {
         s
     }
 
-    pub fn with_observables(&self, o: &str) -> Self {
-        let mut s = self.clone();
-        if !o.is_empty() {
-            s.observables = Some(o.to_string())
-        }
-        s
-    }
-
-    /// Returns true if this Ionosphere Maps describes
-    /// a theoretical model, not measured data
-    pub fn is_theoretical_model(&self) -> bool {
-        self.observables.is_some()
-    }
-
-    /// Copies self and set number of stations
-    pub fn with_nb_stations(&self, n: u32) -> Self {
-        let mut s = self.clone();
-        s.nb_stations = n;
-        s
-    }
-
-    /// Copies self and set number of satellites
-    pub fn with_nb_satellites(&self, n: u32) -> Self {
-        let mut s = self.clone();
-        s.nb_satellites = n;
-        s
-    }
-
     /// Copies & set Base Radius in km
-    pub fn with_base_radius(&self, b: f32) -> Self {
+    pub fn with_base_radius_km(&self, base_radius_km: f32) -> Self {
         let mut s = self.clone();
-        s.base_radius = b;
+        s.base_radius_km = base_radius_km;
         s
     }
 
-    pub fn with_map_dimension(&self, d: u8) -> Self {
+    pub fn with_map_dimension(&self, dim: u8) -> Self {
         let mut s = self.clone();
-        s.map_dimension = d;
+        s.map_dimension = dim;
         s
     }
 
@@ -294,15 +279,7 @@ impl Header {
     /// Adds altitude grid definition
     pub fn with_altitude_grid(&self, grid: Linspace) -> Self {
         let mut s = self.clone();
-        s.grid.height = grid;
-        s
-    }
-
-    /// Copies & sets Diffenretial Code Bias estimates
-    /// for given vehicle
-    pub fn with_dcb(&self, src: BiasSource, value: (f64, f64)) -> Self {
-        let mut s = self.clone();
-        s.dcbs.insert(src, value);
+        s.grid.altitude = grid;
         s
     }
 }

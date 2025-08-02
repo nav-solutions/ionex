@@ -4,10 +4,11 @@ use crate::prelude::ParsingError;
 use serde::{Deserialize, Serialize};
 
 /// [MappingFunction] used in the determination of the TEC map.
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Default, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum MappingFunction {
     /// No mapping function being used
+    #[default]
     None,
 
     /// Model is 1/cos(z)
@@ -20,10 +21,10 @@ pub enum MappingFunction {
 impl std::str::FromStr for MappingFunction {
     type Err = ParsingError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().to_lowercase().as_str() {
-            "q" => Ok(Self::QFactor),
-            "cos" | "cosine" => Ok(Self::CosZ),
-            "none" => Ok(Self::None),
+        match s {
+            "Q" => Ok(Self::QFactor),
+            "NONE" => Ok(Self::None),
+            "COS" | "cosine" => Ok(Self::CosZ),
             _ => Err(ParsingError::MappingFunction),
         }
     }
@@ -32,8 +33,8 @@ impl std::str::FromStr for MappingFunction {
 impl std::fmt::Display for MappingFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::CosZ => write!(f, "1/Cos(z)"),
-            Self::QFactor => write!(f, "Q-factor"),
+            Self::CosZ => write!(f, "COS"),
+            Self::QFactor => write!(f, "Q"),
             Self::None => write!(f, "NONE"),
         }
     }

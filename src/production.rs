@@ -8,7 +8,7 @@ pub enum Error {
     NonStandardFilename,
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Copy, Default, Clone, PartialEq)]
 pub enum Region {
     /// Local IONEX (Regional maps)
     Regional,
@@ -16,6 +16,15 @@ pub enum Region {
     /// Global IONEX (Worldwide maps)
     #[default]
     Global,
+}
+
+impl std::fmt::Display for Region {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Regional => write!(f, "{}", 'R'),
+            Self::Global => write!(f, "{}", 'G'),
+        }
+    }
 }
 
 /// File production attributes. Used when generating
@@ -61,18 +70,13 @@ impl std::str::FromStr for ProductionAttributes {
             return Err(Error::NonStandardFilename);
         }
 
-        let offset = fname.find('.').unwrap_or(0);
+        let offset = filename.find('.').unwrap_or(0);
 
         let agency = filename[..4].to_string();
 
         let year = filename[offset + 1..offset + 3]
             .parse::<u32>()
-            .map_err(|_| Error::NonStandardFileName)?;
-
-        let name_offset = match rtype {
-            "I" => 3usize, // only 3 digits on IONEX
-            _ => 4usize,
-        };
+            .map_err(|_| Error::NonStandardFilename)?;
 
         let region = if filename[4..5].eq("G") {
             Region::Global
@@ -87,7 +91,7 @@ impl std::str::FromStr for ProductionAttributes {
             doy: {
                 filename[4..7]
                     .parse::<u32>()
-                    .map_err(|_| Error::NonStandardFileName)?
+                    .map_err(|_| Error::NonStandardFilename)?
             },
             #[cfg(feature = "flate2")]
             gzip_compressed: filename.ends_with(".gz"),
@@ -97,10 +101,7 @@ impl std::str::FromStr for ProductionAttributes {
 
 #[cfg(test)]
 mod test {
-    use super::DetailedProductionAttributes;
     use super::ProductionAttributes;
-
-    use hifitime::Unit;
     use std::str::FromStr;
 
     #[test]

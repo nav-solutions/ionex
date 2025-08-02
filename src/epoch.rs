@@ -1,5 +1,5 @@
 //! Epoch parsing helper
-use crate::prelude::{Epoch, ParsingError, TimeScale};
+use crate::prelude::{Epoch, ParsingError};
 
 use std::str::FromStr;
 

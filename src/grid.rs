@@ -5,7 +5,7 @@ use serde::Serialize;
 
 /// [Grid] used to describe latitude, longitude
 /// and altitude linar spaces, defining the entire map.
-#[derive(Debug, Clone, Default, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Grid {
     /// Latitude [Linspace]
@@ -28,5 +28,23 @@ impl Grid {
     /// That means the altitude is a single point with null width.
     pub fn is_2d_grid(&self) -> bool {
         self.altitude.is_single_point()
+    }
+
+    /// Defines a new [Grid] with updated latitude space
+    pub fn with_latitude_space(mut self, linspace: Linspace) -> Self {
+        self.latitude = linspace;
+        self
+    }
+
+    /// Defines a new [Grid] with updated longitude space
+    pub fn with_longitude_space(mut self, linspace: Linspace) -> Self {
+        self.longitude = linspace;
+        self
+    }
+
+    /// Defines a new [Grid] with updated altitude space
+    pub fn with_altitude_space(mut self, linspace: Linspace) -> Self {
+        self.altitude = linspace;
+        self
     }
 }

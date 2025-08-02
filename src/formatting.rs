@@ -1,34 +1,31 @@
 use crate::{
-    fmt_rinex,
-    ionex::{IonexKey, QuantizedCoordinates, Record},
-    prelude::Header,
-    FormattingError,
+    error::FormattingError,
+    fmt_ionex,
+    prelude::{Header, Key, QuantizedCoordinates, Record},
 };
 
 use itertools::Itertools;
 
 use std::io::{BufWriter, Write};
 
-pub fn format<W: Write>(
+pub fn format_record<W: Write>(
     w: &mut BufWriter<W>,
     record: &Record,
     header: &Header,
 ) -> Result<(), FormattingError> {
     const NUM_LONGITUDES_PER_LINE: usize = 16;
 
-    let specs = header
-        .ionex
-        .as_ref()
-        .ok_or(FormattingError::NoGridDefinition)?;
-
     // browse grid:
     // - for each altitude (km)
     // - - browse latitude (starting on northernmost.. to southernmost)
     // - - - browse longitude (starting on easternmost.. to westernmost)
-    let grid = &specs.grid;
+    let grid = &header.grid;
 
-    let (altitude_low_km, altitude_high_km, altitude_spacing_km) =
-        (grid.height.start, grid.height.end, grid.height.spacing);
+    let (altitude_low_km, altitude_high_km, altitude_spacing_km) = (
+        grid.altitude.start,
+        grid.altitude.end,
+        grid.altitude.spacing,
+    );
 
     let (latitude_north_ddeg, latitude_south_ddeg, latitude_spacing_ddeg) = (
         grid.latitude.start,
@@ -51,7 +48,7 @@ pub fn format<W: Write>(
         writeln!(
             w,
             "{}",
-            fmt_rinex(&format!("{:6}", nth_map), "START OF TEC MAP")
+            fmt_ionex(&format!("{:6}", nth_map), "START OF TEC MAP")
         )?;
 
         let mut altitude_km = altitude_low_km;
@@ -65,7 +62,7 @@ pub fn format<W: Write>(
                 writeln!(
                     w,
                     "{}",
-                    fmt_rinex(
+                    fmt_ionex(
                         &format!(
                             "  {:3.1}{:3.1}{:3.1}   {:3.1} {:3.1}",
                             latitude_ddeg,
@@ -88,14 +85,14 @@ pub fn format<W: Write>(
                         -1,
                     );
 
-                    let key = IonexKey {
+                    let key = Key {
                         epoch: t,
                         coordinates: coords,
                     };
 
                     if let Some(tec) = record.get(&key) {
                         write!(w, "{:5}", tec.tecu())?;
-                        has_rms |= tec.rms_tec().is_some();
+                        has_rms |= tec.root_mean_square().is_some();
                     } else {
                         write!(w, "9999 ")?;
                     }
@@ -115,14 +112,14 @@ pub fn format<W: Write>(
 
             altitude_km += altitude_spacing_km;
         }
-        writeln!(w, "{}", fmt_rinex("", "END OF TEC MAP"))?;
+        writeln!(w, "{}", fmt_ionex("", "END OF TEC MAP"))?;
 
         if has_rms {
             // format RMS map
             writeln!(
                 w,
                 "{}",
-                fmt_rinex(&format!("{:6}", nth_map), "START OF RMS MAP")
+                fmt_ionex(&format!("{:6}", nth_map), "START OF RMS MAP")
             )?;
 
             while altitude_km < altitude_high_km {
@@ -135,7 +132,7 @@ pub fn format<W: Write>(
                     writeln!(
                         w,
                         "{}",
-                        fmt_rinex(
+                        fmt_ionex(
                             &format!(
                                 "  {:3.1}{:3.1}{:3.1}   {:3.1} {:3.1}",
                                 latitude_ddeg,
@@ -158,7 +155,7 @@ pub fn format<W: Write>(
                             -1,
                         );
 
-                        let key = IonexKey {
+                        let key = Key {
                             epoch: t,
                             coordinates: coords,
                         };
@@ -184,7 +181,7 @@ pub fn format<W: Write>(
 
                 altitude_km += altitude_spacing_km;
             }
-            writeln!(w, "{}", fmt_rinex("", "END OF RMS MAP"))?;
+            writeln!(w, "{}", fmt_ionex("", "END OF RMS MAP"))?;
         }
 
         if has_h {
@@ -192,7 +189,7 @@ pub fn format<W: Write>(
             writeln!(
                 w,
                 "{}",
-                fmt_rinex(&format!("{:6}", nth_map), "START OF HEIGHT MAP")
+                fmt_ionex(&format!("{:6}", nth_map), "START OF HEIGHT MAP")
             )?;
 
             while altitude_km < altitude_high_km {
@@ -205,7 +202,7 @@ pub fn format<W: Write>(
                     writeln!(
                         w,
                         "{}",
-                        fmt_rinex(
+                        fmt_ionex(
                             &format!(
                                 "  {:3.1}{:3.1}{:3.1}   {:3.1} {:3.1}",
                                 latitude_ddeg,
@@ -228,7 +225,7 @@ pub fn format<W: Write>(
                             -1,
                         );
 
-                        let key = IonexKey {
+                        let key = Key {
                             epoch: t,
                             coordinates: coords,
                         };
@@ -254,7 +251,7 @@ pub fn format<W: Write>(
 
                 altitude_km += altitude_spacing_km;
             }
-            writeln!(w, "{}", fmt_rinex("", "END OF HEIGHT MAP"))?;
+            writeln!(w, "{}", fmt_ionex("", "END OF HEIGHT MAP"))?;
         }
     }
     Ok(())

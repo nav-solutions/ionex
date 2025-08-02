@@ -96,37 +96,38 @@ impl std::str::FromStr for TheoreticalModel {
     }
 }
 
-impl std::fmt::Display for TheroreicalModel {
+impl std::fmt::Display for TheoreticalModel {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.write_str(&self.to_string())
     }
 }
 
-impl Default for RefSystem {
+impl Default for ReferenceSystem {
     fn default() -> Self {
         Self::Constellation(Constellation::default())
     }
 }
 
-impl std::fmt::Display for RefSystem {
+impl std::fmt::Display for ReferenceSystem {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Constellation(c) => c.fmt(f),
-            Self::OtherSystem(s) => s.fmt(f),
-            Self::TheoreticalModel(m) => m.fmt(f),
+            Self::Other(other) => other.fmt(f),
+            Self::Model(m) => m.fmt(f),
         }
     }
 }
 
-impl FromStr for RefSystem {
+impl FromStr for ReferenceSystem {
     type Err = ParsingError;
+
     fn from_str(system: &str) -> Result<Self, Self::Err> {
         if let Ok(gnss) = Constellation::from_str(system) {
             Ok(Self::Constellation(gnss))
         } else if system.eq("GNSS") {
             Ok(Self::Constellation(Constellation::Mixed))
         } else if let Ok(other) = OtherSystem::from_str(system) {
-            Ok(Self::OtherSystem(other))
+            Ok(Self::Other(other))
         } else if let Ok(m) = TheoreticalModel::from_str(system) {
             Ok(Self::Model(m))
         } else {

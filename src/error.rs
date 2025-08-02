@@ -1,11 +1,8 @@
 use thiserror::Error;
 
 use gnss_rs::{
-    constellation::ParsingError as ConstellationParsingError, cospar::Error as CosparParsingError,
-    domes::Error as DOMESParsingError, sv::ParsingError as SVParsingError,
+    constellation::ParsingError as ConstellationParsingError, sv::ParsingError as SVParsingError,
 };
-
-use hifitime::{HifitimeError, ParsingError as HifitimeParsingError};
 
 use std::io::Error as IoError;
 
@@ -65,9 +62,6 @@ pub enum ParsingError {
 
     #[error("map grid specs parsing")]
     GridSpecs,
-
-    #[error("invalid map grid specs")]
-    BadGridSpecs,
 
     #[error("error when parsing grid coordinates")]
     GridCoordinates,

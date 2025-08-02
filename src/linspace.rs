@@ -4,7 +4,7 @@ use crate::prelude::ParsingError;
 
 /// Linear space as used in IONEX or Antenna grid definitions.
 /// Linear space starting from `start` ranging to `end` (included).
-#[derive(Debug, Clone, Default, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Linspace {
     /// First value
@@ -39,10 +39,10 @@ impl Linspace {
                         spacing,
                     })
                 } else {
-                    Err(ParsingError::BadIonexGridSpecs)
+                    Err(ParsingError::InvalidGridDefinition)
                 }
             } else {
-                Err(ParsingError::BadIonexGridSpecs)
+                Err(ParsingError::InvalidGridDefinition)
             }
         }
     }
