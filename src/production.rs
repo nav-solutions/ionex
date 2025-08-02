@@ -106,7 +106,7 @@ mod test {
 
     #[test]
     fn filenames() {
-        for (filename, name, year, doy, region) in [
+        for (filename, agency, year, doy, region) in [
             ("CKMG0020.22I", "CKM", 2022, 2, Region::Global),
             ("CKMG0090.21I", "CKM", 2021, 9, Region::Global),
             ("jplg0010.17i", "JPL", 2017, 1, Region::Global),

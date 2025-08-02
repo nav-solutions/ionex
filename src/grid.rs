@@ -123,6 +123,7 @@ impl std::str::FromStr for GridSpecs {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn grid_specs_parsing() {

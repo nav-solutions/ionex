@@ -6,8 +6,9 @@ pub mod formatting;
 mod parsing;
 
 use log::LevelFilter;
-
 use std::sync::Once;
+
+use crate::prelude::IONEX;
 
 static INIT: Once = Once::new();
 

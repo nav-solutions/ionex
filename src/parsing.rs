@@ -224,15 +224,12 @@ pub(crate) fn parse_record<R: Read>(
 
 #[cfg(test)]
 mod test {
-    use super::{
-        is_new_height_map, is_new_rms_map, is_new_tec_map, parse_grid_specs, parse_tec_map,
-        Quantized,
-    };
+    use super::{is_new_height_map, is_new_rms_map, is_new_tec_map, parse_tec_map, Quantized};
 
     use crate::prelude::{Epoch, Key, QuantizedCoordinates, Record};
 
     #[test]
-    fn new_ionex_map() {
+    fn ionex_keywords() {
         assert!(is_new_tec_map(
             "1                                                      START OF TEC MAP"
         ));
@@ -250,10 +247,11 @@ mod test {
     fn tec_map_parsing() {
         let mut record = Record::default();
 
+        let tec_exponent = -1;
         let lat_exponent = Quantized::find_exponent(2.5);
         let long_exponent = Quantized::find_exponent(5.0);
         let alt_exponent = Quantized::find_exponent(0.0);
-        let tec_exponent = -1;
+
         let epoch = Epoch::from_gregorian_utc_at_midnight(2017, 1, 1);
 
         let content =
@@ -566,6 +564,7 @@ mod test {
             let tecu = tec.tecu();
             let expected = quantized_tecu as f64 * 10.0_f64.powi(tec_exponent as i32);
             let err = (tecu - expected).abs();
+
             assert!(err < 1.0E-6);
         }
     }

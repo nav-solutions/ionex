@@ -493,7 +493,7 @@ impl IONEX {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{fmt_comment, is_rinex_comment};
+    use crate::{fmt_comment, is_comment};
     #[test]
     fn fmt_comments_singleline() {
         for desc in [
@@ -502,16 +502,19 @@ mod test {
             "just another lengthy comment blahblabblah",
         ] {
             let comment = fmt_comment(desc);
+
             assert!(
                 comment.len() >= 60,
                 "comments should be at least 60 byte long"
             );
+
             assert_eq!(
                 comment.find("COMMENT"),
                 Some(60),
                 "comment marker should located @ 60"
             );
-            assert!(is_rinex_comment(&comment), "should be valid comment");
+
+            assert!(is_comment(&comment), "should be valid comment");
         }
     }
 
@@ -521,11 +524,13 @@ mod test {
             "just trying to form a very very lengthy comment that will overflow since it does fit on three very meaningful lines. Imazdmazdpoakzdpoakzpdokpokddddddddddddddddddaaaaaaaaaaaaaaaaaaaaaaa"] {
             let nb_lines = num_integer::div_ceil(desc.len(), 60);
             let comments = fmt_comment(desc);
+
             assert_eq!(comments.lines().count(), nb_lines);
+
             for line in comments.lines() {
                 assert!(line.len() >= 60, "comment line should be at least 60 byte long");
                 assert_eq!(line.find("COMMENT"), Some(60), "comment marker should located @ 60");
-                assert!(is_rinex_comment(line), "should be valid comment");
+                assert!(is_comment(line), "should be valid comment");
             }
         }
     }

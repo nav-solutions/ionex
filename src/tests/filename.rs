@@ -1,5 +1,7 @@
 use crate::prelude::*;
 
+use std::path::Path;
+
 #[test]
 fn filename_conventions() {
     for testfile in [

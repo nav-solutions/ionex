@@ -1,3 +1,6 @@
+use crate::prelude::IONEX;
+
+#[test]
 fn gzip_repo_parsing() {
     let prefix = "data/IONEX/V1";
 
