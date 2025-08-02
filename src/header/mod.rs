@@ -1,4 +1,5 @@
 /// IONEX specific header fields
+mod parsing;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -6,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     fmt_ionex,
     linspace::Linspace,
-    prelude::{BiasSource, Epoch, FormattingError, Grid, MappingFunction, ReferenceSystem},
+    prelude::{
+        BiasSource, Comments, Epoch, FormattingError, Grid, MappingFunction, ReferenceSystem,
+    },
 };
 
 use std::{
@@ -38,7 +41,7 @@ pub struct Header {
 
     /// Mapping function adopted for TEC determination,
     /// if None: No mapping function, e.g altimetry
-    pub mapping: Option<MappingFunction>,
+    pub mapf: Option<MappingFunction>,
 
     /// Maps dimension, can either be a 2D (= fixed altitude mode), or 3D
     pub map_dimension: u8,
@@ -46,29 +49,20 @@ pub struct Header {
     /// Mean earth radius or bottom of height grid, in km.
     pub base_radius: f32,
 
+    /// Sampling period, duration gap between two maps.
+    pub sampling_period: Duration,
+
     /// Map [Grid] definition.
     pub grid: Grid,
 
     /// Minimum elevation angle filter used. In degrees.
     pub elevation_cutoff: f32,
 
-    /// Description of the observables processed during the
-    /// TEC map determination. TEC maps based on theoretical
-    /// models will not provide any observable.
-    pub observables: Option<String>,
-
-    /// Number of stations that contributed to following results.
-    pub nb_stations: u32,
-
-    /// Number of satellites that contributed to following results.
-    pub nb_satellites: u32,
-
     /// exponent: scaling to apply in current TEC blocs
     exponent: i8,
 
-    /// Differential Code Biases (DBCs),
-    /// per Vehicle #PRN, (Bias and RMS bias) values.
-    pub dcbs: HashMap<BiasSource, (f64, f64)>,
+    /// Comments found in the header section
+    pub comments: Comments,
 }
 
 impl Default for Header {

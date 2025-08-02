@@ -46,7 +46,7 @@ pub enum OtherSystem {
     IRI,
 }
 
-impl std::str::FromStr for ObsSystem {
+impl std::str::FromStr for OtherSystem {
     type Err = ParsingError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
@@ -59,7 +59,7 @@ impl std::str::FromStr for ObsSystem {
     }
 }
 
-impl std::fmt::Display for ObsSystem {
+impl std::fmt::Display for OtherSystem {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.write_str(&self.to_string())
     }
@@ -83,19 +83,20 @@ pub enum TheoreticalModel {
     TOP,
 }
 
-impl std::str::FromStr for Model {
+impl std::str::FromStr for TheoreticalModel {
     type Err = ParsingError;
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "mix" => Ok(Self::MIX),
             "nns" => Ok(Self::NNS),
             "top" => Ok(Self::TOP),
-            _ => Err(ParsingError::IonexModel),
+            _ => Err(ParsingError::UnknownThoreticalModel),
         }
     }
 }
 
-impl std::fmt::Display for Model {
+impl std::fmt::Display for TheroreicalModel {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.write_str(&self.to_string())
     }
@@ -103,16 +104,16 @@ impl std::fmt::Display for Model {
 
 impl Default for RefSystem {
     fn default() -> Self {
-        Self::GnssConstellation(Constellation::default())
+        Self::Constellation(Constellation::default())
     }
 }
 
 impl std::fmt::Display for RefSystem {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::GnssConstellation(c) => c.fmt(f),
-            Self::ObservationSystem(s) => s.fmt(f),
-            Self::Model(m) => m.fmt(f),
+            Self::Constellation(c) => c.fmt(f),
+            Self::OtherSystem(s) => s.fmt(f),
+            Self::TheoreticalModel(m) => m.fmt(f),
         }
     }
 }
@@ -121,15 +122,15 @@ impl FromStr for RefSystem {
     type Err = ParsingError;
     fn from_str(system: &str) -> Result<Self, Self::Err> {
         if let Ok(gnss) = Constellation::from_str(system) {
-            Ok(Self::GnssConstellation(gnss))
+            Ok(Self::Constellation(gnss))
         } else if system.eq("GNSS") {
-            Ok(Self::GnssConstellation(Constellation::Mixed))
-        } else if let Ok(obs) = ObsSystem::from_str(system) {
-            Ok(Self::ObservationSystem(obs))
-        } else if let Ok(m) = Model::from_str(system) {
+            Ok(Self::Constellation(Constellation::Mixed))
+        } else if let Ok(other) = OtherSystem::from_str(system) {
+            Ok(Self::OtherSystem(other))
+        } else if let Ok(m) = TheoreticalModel::from_str(system) {
             Ok(Self::Model(m))
         } else {
-            Err(ParsingError::IonexReferenceSystem)
+            Err(ParsingError::ReferenceSystem)
         }
     }
 }

@@ -27,17 +27,17 @@ extern crate serde;
 extern crate gnss_rs as gnss;
 extern crate num;
 
-pub mod error;
-pub mod header;
-pub mod production;
-// pub mod record;
 pub mod bias;
 pub mod coordinates;
+pub mod error;
 pub mod grid;
+pub mod header;
 pub mod key;
 pub mod linspace;
 pub mod mapf;
+pub mod production;
 pub mod quantized;
+pub mod record;
 pub mod system;
 pub mod tec;
 pub mod version;
@@ -68,7 +68,14 @@ use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 
 use std::collections::BTreeMap;
 
-use crate::{epoch::epoch_decompose, header::Header, production::ProductionAttributes};
+use hifitime::prelude::Epoch;
+
+use crate::{
+    epoch::epoch_decompose,
+    error::{FormattingError, ParsingError},
+    header::Header,
+    production::ProductionAttributes,
+};
 
 pub mod prelude {
     // export

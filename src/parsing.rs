@@ -1,8 +1,10 @@
-//! IONEX maps parsing
-
-use crate::prelude::{
-    Epoch, ParsingError, IonexKey, Quantized, QuantizedCoordinates,
-    Record, Tec};
+use crate::{
+    prelude::{
+        Epoch, ParsingError, Key, Quantized, QuantizedCoordinates,
+        Record, TEC,
+    },
+    error::ParsingError,
+};
 
 pub fn is_new_tec_map(line: &str) -> bool {
     line.contains("START OF TEC MAP")
@@ -93,11 +95,14 @@ pub fn parse_tec_map(
             if marker.contains("EXPONENT") {
                 // should not have been presented (handled @ higher level)
                 continue; // avoid parsing
+
             } else if marker.contains("EPOCH OF CURRENT MAP") {
                 // should not have been presented (handled @ higher level)
                 continue; // avoid parsing
+
             } else if marker.contains("START OF") {
                 continue; // avoid parsing
+
             } else if marker.contains("LAT/LON1/LON2/DLON/H") {
                 // grid specs (to follow)
                 (fixed_lat, long1, long_spacing, fixed_alt) = parse_grid_specs(content)?;

@@ -7,6 +7,7 @@ use crate::prelude::ParsingError;
 pub struct Version {
     /// Version major number
     pub major: u8,
+
     /// Version minor number
     pub minor: u8,
 }
@@ -82,9 +83,9 @@ impl std::str::FromStr for Version {
 
         match s.contains('.') {
             true => {
-                let major = digits.next().ok_or(ParsingError::VersionFormat)?;
+                let major = digits.next().ok_or(ParsingError::VersionParsing)?;
 
-                let minor = digits.next().ok_or(ParsingError::VersionFormat)?;
+                let minor = digits.next().ok_or(ParsingError::VersionParsing)?;
 
                 let major = major.parse::<u8>().or(Err(ParsingError::VersionParsing))?;
                 let minor = minor.parse::<u8>().or(Err(ParsingError::VersionParsing))?;
@@ -92,7 +93,7 @@ impl std::str::FromStr for Version {
                 Ok(Self { major, minor })
             },
             false => {
-                let major = digits.next().ok_or(ParsingError::VersionFormat)?;
+                let major = digits.next().ok_or(ParsingError::VersionParsing)?;
 
                 let major = major.parse::<u8>().or(Err(ParsingError::VersionParsing))?;
 

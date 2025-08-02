@@ -1,11 +1,11 @@
 //! File production infrastructure.
 use thiserror::Error;
 
-#[derive(Error, Debug)]
 /// File Production identification errors
+#[derive(Error, Debug)]
 pub enum Error {
     #[error("filename does not follow naming conventions")]
-    NonStandardFileName,
+    NonStandardFilename,
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -53,71 +53,38 @@ impl std::str::FromStr for ProductionAttributes {
     type Err = Error;
     fn from_str(fname: &str) -> Result<Self, Self::Err> {
         let fname = fname.to_uppercase();
-        if fname.len() < 13 {
-            let offset = fname.find('.').unwrap_or(0);
-            if offset != 8 {
-                return Err(Error::NonStandardFileName);
-            };
-
-            // determine type of RINEX first
-            // because it determines how to parse the "name" field
-            let year = fname[offset + 1..offset + 3]
-                .parse::<u32>()
-                .map_err(|_| Error::NonStandardFileName)?;
-
-            let rtype = &fname[offset + 3..offset + 4];
-            let name_offset = match rtype {
-                "I" => 3usize, // only 3 digits on IONEX
-                _ => 4usize,
-            };
-
-            Ok(Self {
-                year: year + 2_000, // year uses 2 digit in old format
-                name: fname[..name_offset].to_string(),
-                doy: {
-                    fname[4..7]
-                        .parse::<u32>()
-                        .map_err(|_| Error::NonStandardFileName)?
-                },
-                region: match rtype {
-                    "I" => fname.chars().nth(3),
-                    _ => None,
-                },
-                v3_details: None,
-            })
-        } else {
-            let offset = fname.find('.').unwrap_or(0);
-            if offset < 30 {
-                return Err(Error::NonStandardFileName);
-            };
-
-            let year = fname[12..16]
-                .parse::<u32>()
-                .map_err(|_| Error::NonStandardFileName)?;
-
-            let batch = fname[5..6]
-                .parse::<u8>()
-                .map_err(|_| Error::NonStandardFileName)?;
-
-            // determine type of RINEX first
-            // because it determines how to parse the "name" field
-            let rtype = &fname[offset + 3..offset + 4];
-            let name_offset = match rtype {
-                "I" => 3usize, // only 3 digits on IONEX
-                _ => 4usize,
-            };
-
-            Ok(Self {
-                year,
-                name: fname[..name_offset].to_string(),
-                doy: {
-                    fname[16..19]
-                        .parse::<u32>()
-                        .map_err(|_| Error::NonStandardFileName)?
-                },
-                region: None, // IONEX files only use a short format
-            })
+        if fname.len() != 13 {
+            return Err(Error::NonStandardFilename);
         }
+
+        let offset = fname.find('.').unwrap_or(0);
+
+        // determine type of RINEX first
+        // because it determines how to parse the "name" field
+        let year = fname[offset + 1..offset + 3]
+            .parse::<u32>()
+            .map_err(|_| Error::NonStandardFileName)?;
+
+        let rtype = &fname[offset + 3..offset + 4];
+
+        let name_offset = match rtype {
+            "I" => 3usize, // only 3 digits on IONEX
+            _ => 4usize,
+        };
+
+        Ok(Self {
+            year: year + 2_000, // year uses 2 digit in old format
+            name: fname[..name_offset].to_string(),
+            doy: {
+                fname[4..7]
+                    .parse::<u32>()
+                    .map_err(|_| Error::NonStandardFileName)?
+            },
+            region: match rtype {
+                "I" => fname.chars().nth(3),
+                _ => None,
+            },
+        })
     }
 }
 

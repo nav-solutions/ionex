@@ -2,25 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use thiserror::Error;
 
-use crate::prelude::{
-    Quantized,
-    Key,
-    Epoch,
-    TEC,
-    Header,
-};
-
-pub(crate) fn is_new_tec_plane(line: &str) -> bool {
-    line.contains("START OF TEC MAP")
-}
-
-pub(crate) fn is_new_rms_plane(line: &str) -> bool {
-    line.contains("START OF RMS MAP")
-}
-
-// pub(crate) fn is_new_height_map(line: &str) -> bool {
-//     line.contains("START OF HEIGHT MAP")
-// }
+use crate::prelude::{Epoch, Header, Key, Quantized, TEC};
 
 /// [Record] describes IONEX data.
 pub type Record = BTreeMap<Key, TEC>;
@@ -133,7 +115,7 @@ pub(crate) fn parse_plane(
                                     tec: 0.0_f64, // DONT CARE
                                     rms: Some(value),
                                 }
-                            }
+                            },
                             false => TEC {
                                 tec: value,
                                 rms: None,
@@ -163,7 +145,7 @@ pub(crate) fn parse_plane(
                                 tec: 0.0_f64, // DONT CARE
                                 rms: Some(value),
                             }
-                        }
+                        },
                         false => TEC {
                             tec: value,
                             rms: None,
@@ -182,34 +164,10 @@ pub(crate) fn parse_plane(
     Ok((epoch, altitude, plane))
 }
 
-#[cfg(feature = "qc")]
-use qc_traits::MergeError;
-
-#[cfg(feature = "qc")]
-pub(crate) fn merge_mut(lhs: &mut Record, rhs: &Record) -> Result<(), MergeError> {
-    for (eh, plane) in rhs {
-        if let Some(lhs_plane) = lhs.get_mut(eh) {
-            for (latlon, plane) in plane {
-                if let Some(tec) = lhs_plane.get_mut(latlon) {
-                    if let Some(rms) = plane.rms {
-                        if tec.rms.is_none() {
-                            tec.rms = Some(rms);
-                        }
-                    }
-                } else {
-                    lhs_plane.insert(*latlon, plane.clone());
-                }
-            }
-        } else {
-            lhs.insert(*eh, plane.clone());
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
+
     #[test]
     fn test_new_tec_map() {
         assert!(is_new_tec_plane(
@@ -228,7 +186,4 @@ mod test {
         //     true
         // );
     }
-    //#[test]
-    //fn test_merge_map2d() {
-    //}
 }

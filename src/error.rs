@@ -9,9 +9,12 @@ use hifitime::{HifitimeError, ParsingError as HifitimeParsingError};
 
 use std::io::Error as IoError;
 
-/// Errors that may rise during the parsing process.
+/// Errors that may rise during parsing process.
 #[derive(Debug, Error)]
 pub enum ParsingError {
+    #[error("I/O input error: {0}")]
+    IoError(#[from] IoError),
+
     #[error("header line too short (invalid)")]
     HeaderLineTooShort,
 
@@ -54,8 +57,8 @@ pub enum ParsingError {
     #[error("mapping function parsing error")]
     MappingFunction,
 
-    #[error("datetime parsing error: {0}")]
-    HifitimeParsing(#[from] HifitimeParsingError),
+    #[error("datetime parsing error")]
+    DatetimeParsing,
 
     #[error("map index parsing")]
     MapIndex,
@@ -72,18 +75,18 @@ pub enum ParsingError {
     #[error("earth observation satellite")]
     EarthObservationSat,
 
-    #[error("model parsing issue")]
-    ModelParsing,
+    #[error("unknown theoretical model")]
+    UnknownTheoreticalModel,
 
     #[error("scaling parsing issue")]
     ExponentScaling,
 }
 
-/// Errors that may rise in Formatting process
+/// Errors that may rise during Formatting process
 #[derive(Error, Debug)]
 pub enum FormattingError {
-    #[error("i/o: output error")]
-    OutputError(#[from] IoError),
+    #[error("I/O output error: {0}")]
+    IoError(#[from] IoError),
 
     #[error("missing grid definition")]
     NoGridDefinition,
