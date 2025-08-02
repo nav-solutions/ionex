@@ -54,7 +54,7 @@ impl std::str::FromStr for OtherSystem {
             "env" => Ok(Self::ENVisat),
             "ers" => Ok(Self::ERS),
             "iri" => Ok(Self::IRI),
-            _ => Err(ParsingError::IonexEarthObservationSat),
+            _ => Err(ParsingError::UnknownEarthObservationSat),
         }
     }
 }
@@ -91,7 +91,7 @@ impl std::str::FromStr for TheoreticalModel {
             "mix" => Ok(Self::MIX),
             "nns" => Ok(Self::NNS),
             "top" => Ok(Self::TOP),
-            _ => Err(ParsingError::UnknownThoreticalModel),
+            _ => Err(ParsingError::UnknownTheoreticalModel),
         }
     }
 }

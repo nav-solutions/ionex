@@ -51,39 +51,46 @@ impl ProductionAttributes {
 
 impl std::str::FromStr for ProductionAttributes {
     type Err = Error;
-    fn from_str(fname: &str) -> Result<Self, Self::Err> {
-        let fname = fname.to_uppercase();
-        if fname.len() != 13 {
+
+    fn from_str(filename: &str) -> Result<Self, Self::Err> {
+        let filename = filename.to_uppercase();
+
+        let name_len = filename.len();
+
+        if name_len != 12 && name_len != 15 {
             return Err(Error::NonStandardFilename);
         }
 
         let offset = fname.find('.').unwrap_or(0);
 
-        // determine type of RINEX first
-        // because it determines how to parse the "name" field
-        let year = fname[offset + 1..offset + 3]
+        let agency = filename[..4].to_string();
+
+        let year = filename[offset + 1..offset + 3]
             .parse::<u32>()
             .map_err(|_| Error::NonStandardFileName)?;
-
-        let rtype = &fname[offset + 3..offset + 4];
 
         let name_offset = match rtype {
             "I" => 3usize, // only 3 digits on IONEX
             _ => 4usize,
         };
 
+        let region = if filename[4..5].eq("G") {
+            Region::Global
+        } else {
+            Region::Regional
+        };
+
         Ok(Self {
+            region,
+            agency,
             year: year + 2_000, // year uses 2 digit in old format
-            name: fname[..name_offset].to_string(),
             doy: {
-                fname[4..7]
+                filename[4..7]
                     .parse::<u32>()
                     .map_err(|_| Error::NonStandardFileName)?
             },
-            region: match rtype {
-                "I" => fname.chars().nth(3),
-                _ => None,
-            },
+            #[cfg(feature = "flate2")]
+            gzip_compressed: filename.ends_with(".gz"),
         })
     }
 }

@@ -72,8 +72,8 @@ pub enum ParsingError {
     #[error("error when parsing grid coordinates")]
     GridCoordinates,
 
-    #[error("earth observation satellite")]
-    EarthObservationSat,
+    #[error("unknown earth observation satellite")]
+    UnknownEarthObservationSat,
 
     #[error("unknown theoretical model")]
     UnknownTheoreticalModel,

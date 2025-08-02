@@ -37,7 +37,6 @@ pub mod linspace;
 pub mod mapf;
 pub mod production;
 pub mod quantized;
-pub mod record;
 pub mod system;
 pub mod tec;
 pub mod version;
@@ -57,9 +56,6 @@ use std::{
 };
 
 use geo::{coord, Rect};
-
-/// IONEX comments are readable descriptions.
-pub type Comments = Vec<String>;
 
 use itertools::Itertools;
 
@@ -90,17 +86,22 @@ pub mod prelude {
         mapf::MappingFunction,
         production::*,
         quantized::Quantized,
-        record::Record,
         system::ReferenceSystem,
         tec::TEC,
         version::Version,
-        Comments, IONEX,
+        Comments, Record, IONEX,
     };
 
     // pub re-export
     pub use gnss::prelude::{Constellation, SV};
     pub use hifitime::{Duration, Epoch, TimeScale, TimeSeries};
 }
+
+/// IONEX comments are readable descriptions.
+pub type Comments = Vec<String>;
+
+/// [Record] describes IONEX data.
+pub type Record = BTreeMap<Key, TEC>;
 
 /// returns true if given line is a comment
 pub(crate) fn is_comment(content: &str) -> bool {
@@ -129,7 +130,7 @@ pub(crate) fn fmt_ionex(content: &str, marker: &str) -> String {
 
 /// macro to generate comments with standardized formatting
 pub(crate) fn fmt_comment(content: &str) -> String {
-    fmt_rinex(content, "COMMENT")
+    fmt_ionex(content, "COMMENT")
 }
 
 #[derive(Clone, Debug)]
@@ -281,10 +282,17 @@ impl IONEX {
         let region = Region::Global; // TODO: study the grid specs
 
         Some(ProductionAttributes {
-            aagency: agency.to_string(),
             doy,
             year,
             region,
+            agency: agency.to_string(),
+
+            #[cfg(feature = "flate2")]
+            gzip_compressed: if let Some(attributes) = &self.production {
+                attributes.gzip_compressed
+            } else {
+                false
+            },
         })
     }
 
@@ -478,6 +486,11 @@ impl IONEX {
     /// Returns [Epoch] Iterator.
     pub fn epoch_iter(&self) -> Box<dyn Iterator<Item = Epoch> + '_> {
         Box::new(self.record.iter().map(|(k, _)| k.epoch))
+    }
+
+    /// Returns [Epoch] of first map in chronological order
+    pub fn first_epoch(&self) -> Option<Epoch> {
+        self.epoch_iter().nth(0)
     }
 }
 

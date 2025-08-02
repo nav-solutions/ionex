@@ -4,9 +4,6 @@ use thiserror::Error;
 
 use crate::prelude::{Epoch, Header, Key, Quantized, TEC};
 
-/// [Record] describes IONEX data.
-pub type Record = BTreeMap<Key, TEC>;
-
 /*
  * Parses following map, which can either be
  *  - a TEC map

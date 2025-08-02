@@ -39,7 +39,7 @@ impl TEC {
 
     /// Copyes and returns [Self] with update TEC RMS.
     pub fn with_rms(mut self, rms: f64) -> Self {
-        self.rms = Some(Quantized::auto_scaled(rms));
+        self.rms = Some(Quantized::new_auto_scaled(rms));
         self
     }
 

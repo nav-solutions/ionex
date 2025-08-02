@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum MappingFunction {
+    /// No mapping function being used
+    None,
+
     /// Model is 1/cos(z)
     CosZ,
 
@@ -20,7 +23,8 @@ impl std::str::FromStr for MappingFunction {
         match s.trim().to_lowercase().as_str() {
             "q" => Ok(Self::QFactor),
             "cos" | "cosine" => Ok(Self::CosZ),
-            _ => Err(ParsingError::IonexMappingFunction),
+            "none" => Ok(Self::None),
+            _ => Err(ParsingError::MappingFunction),
         }
     }
 }
@@ -28,8 +32,33 @@ impl std::str::FromStr for MappingFunction {
 impl std::fmt::Display for MappingFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::CosZ => write!(f, "Cos-1(z)"),
+            Self::CosZ => write!(f, "1/Cos(z)"),
             Self::QFactor => write!(f, "Q-factor"),
+            Self::None => write!(f, "NONE"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn mapping_function() {
+        for (content, value) in [
+            ("COSZ", MappingFunction::CosZ),
+            ("Q-Factor", MappingFunction::QFactor),
+            ("NONE", MappingFunction::None),
+        ] {
+            let parsed = MappingFunction::from_str(content).unwrap_or_else(|e| {
+                panic!("Failed to parse mapf: \"{}\" - {}", content, e);
+            });
+
+            assert_eq!(parsed, value);
+
+            let formatted = parsed.to_string();
+            assert_eq!(formatted, value);
         }
     }
 }

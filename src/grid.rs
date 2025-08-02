@@ -15,7 +15,7 @@ pub struct Grid {
     pub longitude: Linspace,
 
     /// Altitude [Linspace]
-    pub height: Linspace,
+    pub altitude: Linspace,
 }
 
 impl Grid {
@@ -27,6 +27,6 @@ impl Grid {
     /// Returns true if self is not compatible with a 3D TEC map.
     /// That means the altitude is a single point with null width.
     pub fn is_2d_grid(&self) -> bool {
-        self.height.is_single_point()
+        self.altitude.is_single_point()
     }
 }
