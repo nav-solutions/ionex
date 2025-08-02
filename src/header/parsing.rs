@@ -34,9 +34,8 @@ impl Header {
                 // Comments are stored as is
                 header.comments.push(content.trim().to_string());
             } else if marker.contains("IONEX VERSION / TYPE") {
-                let (vers, rem) = line.split_at(20);
-                let (type_str, rem) = rem.split_at(20);
-                header.version = Version::from_str(type_str)?;
+                let (vers_str, _) = line.split_at(20);
+                header.version = Version::from_str(vers_str)?;
             } else if marker.contains("PGM / RUN BY / DATE") {
                 let (pgm, rem) = line.split_at(20);
 

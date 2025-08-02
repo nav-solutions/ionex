@@ -41,14 +41,8 @@ fn parse_tec_map(
     const NON_AVAILABLE_TEC_KEYWORD: &str = "9999";
     let lines = content.lines();
 
-    let mut fixed_lat = 0.0_f64;
-    let mut long1;
-    let mut long_spacing = 0.0_f64;
-    let mut fixed_alt = 0.0_f64;
-
+    let mut long_ptr = 0.0_f64;
     let mut grid_specs = GridSpecs::default();
-
-    let mut long = 0.0_f64; // current longitude (pointer)
 
     for line in lines {
         if line.len() > 60 {
@@ -56,9 +50,9 @@ fn parse_tec_map(
 
             // Handle special cases
             // * data scaling update
-            // * Timestamp specs (Epoch)
             if marker.contains("LAT/LON1/LON2/DLON/H") {
                 grid_specs = GridSpecs::from_str(content)?;
+                long_ptr = grid_specs.longitude_space.start; // reset pointer
                 continue; // avoid parsing
             } else if marker.contains("END OF TEC MAP") {
                 // end of this block
@@ -74,9 +68,9 @@ fn parse_tec_map(
                 if let Ok(tecu) = item.parse::<i64>() {
                     let tec = TEC::from_quantized(tecu, tec_exponent);
 
-                    let quantized_lat = Quantized::new(fixed_lat, lat_exponent);
-                    let quantized_long = Quantized::new(long, long_exponent);
-                    let quantized_alt = Quantized::new(fixed_alt, alt_exponent);
+                    let quantized_lat = Quantized::new(grid_specs.latitude_ddeg, lat_exponent);
+                    let quantized_long = Quantized::new(long_ptr, long_exponent);
+                    let quantized_alt = Quantized::new(grid_specs.altitude_km, alt_exponent);
 
                     let coordinates = QuantizedCoordinates::from_quantized(
                         quantized_lat,
@@ -90,7 +84,7 @@ fn parse_tec_map(
                 }
             }
 
-            long += long_spacing;
+            long_ptr += grid_specs.longitude_space.spacing;
         }
     }
 
@@ -118,15 +112,13 @@ fn parse_rms_map(
 
     let lines = content.lines();
 
-    let mut fixed_lat = 0.0_f64;
-    let mut fixed_alt = 0.0_f64;
-    let mut long_spacing = 0.0_f64;
-
-    let mut long = 0.0_f64; // current longitude (pointer)
+    let mut long_ptr = 0.0_f64;
+    let mut grid_specs = GridSpecs::default();
 
     for line in lines {
         if line.len() > 60 {
             let marker = line.split_at(60).1;
+
             if marker.contains("END OF RMS MAP") {
                 return Ok(());
             } else if marker.contains("EXPONENT") {
@@ -135,12 +127,11 @@ fn parse_rms_map(
             } else if marker.contains("START OF") {
                 continue; // avoid parsing
             } else if marker.contains("LAT/LON1/LON2/DLON/H") {
-                // gric specs (to follow)
-                (fixed_lat, long, long_spacing, fixed_alt) = parse_grid_specs(content)?;
+                grid_specs = GridSpecs::from_str(content)?;
+                long_ptr = grid_specs.longitude_space.start; // reset ptr
                 continue; // avoid parsing
             } else if marker.contains("END OF RMS MAP") {
-                // block conclusion
-                // don't care about block #id actually
+                // end of this block
                 return Ok(());
             }
         }
@@ -151,9 +142,9 @@ fn parse_rms_map(
 
             if item != NON_AVAILABLE_TEC_KEYWORD {
                 if let Ok(rms_tecu) = item.parse::<i64>() {
-                    let quantized_lat = Quantized::new(fixed_lat, lat_exponent);
-                    let quantized_long = Quantized::new(long, long_exponent);
-                    let quantized_alt = Quantized::new(fixed_alt, alt_exponent);
+                    let quantized_lat = Quantized::new(grid_specs.latitude_ddeg, lat_exponent);
+                    let quantized_long = Quantized::new(long_ptr, long_exponent);
+                    let quantized_alt = Quantized::new(grid_specs.altitude_km, alt_exponent);
 
                     let coordinates = QuantizedCoordinates::from_quantized(
                         quantized_lat,
@@ -164,12 +155,12 @@ fn parse_rms_map(
                     // we only augment previously parsed TEC values
                     let key = Key { epoch, coordinates };
                     if let Some(v) = record.get_mut(&key) {
-                        v.set_quantized_rms(rms_tecu, tec_exponent);
+                        v.set_quantized_root_mean_square(rms_tecu, tec_exponent);
                     }
                 }
             }
 
-            long += long_spacing;
+            long_ptr += grid_specs.longitude_space.spacing;
         }
     }
     Ok(())

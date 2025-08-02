@@ -56,8 +56,8 @@ impl TEC {
         }
     }
 
-    /// Updates RMS [TEC]
-    pub(crate) fn set_quantized_rms(&mut self, rms: i64, exponent: i8) {
+    /// Updates [TEC] Root Mean Square
+    pub(crate) fn set_quantized_root_mean_square(&mut self, rms: i64, exponent: i8) {
         self.rms = Some(Quantized {
             exponent: -exponent,
             quantized: rms,

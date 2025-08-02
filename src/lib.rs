@@ -55,8 +55,6 @@ use std::{
 
 use geo::{coord, Rect};
 
-use itertools::Itertools;
-
 #[cfg(feature = "flate2")]
 use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 
@@ -235,8 +233,6 @@ impl IONEX {
     /// Returns a file name that would describe [Self] according to the
     /// standards.
     pub fn standardized_filename(&self) -> String {
-        let header = &self.header;
-
         let (agency, region, year, doy) = if let Some(production) = &self.production {
             (
                 production.agency.clone(),
@@ -249,6 +245,7 @@ impl IONEX {
         };
 
         let extension = if let Some(production) = &self.production {
+            #[cfg(feature = "flate2")]
             if production.gzip_compressed {
                 ".gz"
             } else {
@@ -258,7 +255,7 @@ impl IONEX {
             ""
         };
 
-        format!("{}{}{:03}.{:02}I", agency, region, doy, year)
+        format!("{}{}{:03}.{:02}I{}", agency, region, doy, year, extension)
     }
 
     /// Guesses File [ProductionAttributes] from actual record content.

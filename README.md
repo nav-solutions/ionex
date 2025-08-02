@@ -9,27 +9,30 @@ IONEX
 [![MRSV](https://img.shields.io/badge/MSRV-1.82.0-orange?style=for-the-badge)](https://github.com/rust-lang/rust/releases/tag/1.82.0)
 [![License](https://img.shields.io/badge/license-MPL_2.0-orange?style=for-the-badge&logo=mozilla)](https://github.com/nav-solutions/ionex/blob/main/LICENSE)
 
-`ionex` is small library to parse IONEX files. IONEX (Ionosphere Maps) are RINEX-like 
-ASCII files that describe an estimate of the Total Electron Density (TEC) in the 
-Ionosphere. The fileset describes its evolution over time (for files that describe more than one map).
-For 3D (volumic files), the total volume is quantized, with an altitude quantization width
-specified in the file header.
+`ionex` is Rust library to parse IONEX and process files. 
+
+IONEX files are RINEX-like ASCII file that describe the Total Electron Density (TEC)
+in the Ionosphere, using TEC maps. They can be Global / Worldwide or limited to a region
+(so called regionnal IONEX). The map is quantized in specific coordinates given a TEC estimate
+for each position. In case of 3D (volumic) IONEX, the volume is also quantized, with an altitude
+quantization spec that is constant over entire fileset and is described in the header.
 
 ## Advantages
 
-- Fast
+- Fast and powerful parser
 - Open sources: read and access all the code
 - Seamless Gzip decompression (on `flate2` feature)
 - Convenient `geo` bridging functions
 - Full 2D support
-- Partial 3D support
-- File formatting is work in progress
+- Full support of Root Mean Square of each TEC estimates
+- Partial 3D support (volumic IONEX)
+- File formatting is work in progress and not validated to this day
 
 ## Citation and referencing
 
 If you need to reference this work, please use the following model:
 
-`Nav-solutions (2025), RINEX: analysis and processing (MPLv2), https://github.com/nav-solutions`
+`Nav-solutions (2025), IONEX (MPLv2), https://github.com/nav-solutions`
 
 ## Contributions
 
