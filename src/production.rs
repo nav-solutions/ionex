@@ -1,6 +1,4 @@
-/*
- * File Production infrastructure.
- */
+//! File production infrastructure.
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -37,6 +35,11 @@ pub struct ProductionAttributes {
 
     /// Regional code present in IONEX file names.
     pub region: Region,
+
+    /// True if this file was gzip compressed
+    #[cfg(feature = "flate2")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "flate2")))]
+    pub gzip_compressed: bool,
 }
 
 impl ProductionAttributes {
@@ -113,26 +116,6 @@ impl std::str::FromStr for ProductionAttributes {
                         .map_err(|_| Error::NonStandardFileName)?
                 },
                 region: None, // IONEX files only use a short format
-                v3_details: Some(DetailedProductionAttributes {
-                    batch,
-                    country: fname[6..9].to_string(),
-                    ppu: PPU::from_str(&fname[24..27])?,
-                    data_src: DataSource::from_str(&fname[10..11])?,
-                    hh: {
-                        fname[19..21]
-                            .parse::<u8>()
-                            .map_err(|_| Error::NonStandardFileName)?
-                    },
-                    mm: {
-                        fname[21..23]
-                            .parse::<u8>()
-                            .map_err(|_| Error::NonStandardFileName)?
-                    },
-                    ffu: match offset {
-                        34 => Some(FFU::from_str(&fname[28..32])?),
-                        _ => None, // NAV FILE case
-                    },
-                }),
             })
         }
     }
@@ -142,7 +125,6 @@ impl std::str::FromStr for ProductionAttributes {
 mod test {
     use super::DetailedProductionAttributes;
     use super::ProductionAttributes;
-    use super::{DataSource, FFU, PPU};
 
     use hifitime::Unit;
     use std::str::FromStr;

@@ -1,21 +1,24 @@
-//! IONEX Grid Quantization
+#[cfg(doc)]
+use crate::prelude::{QuantizedCoordinates, TEC};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+/// [Quantized] value representing either a [TEC] estimate,
+/// or discrete coordinates as [QuantizedCoordinates].
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Quantized {
     /// Exponent (scaling)
-    pub exponent: i8,
+    exponent: i8,
 
     /// Quantized value
-    pub quantized: i64,
+    quantized: i64,
 }
 
 impl Quantized {
     /// Determines best suited exponent to quantize given value
-    pub fn find_exponent(value: f64) -> i8 {
+    pub(crate) fn find_exponent(value: f64) -> i8 {
         let mut val = value;
         let mut exponent = 0;
 
@@ -27,7 +30,8 @@ impl Quantized {
         exponent
     }
 
-    /// Builds new [Quantized] value
+    /// Quantizes given value, using exponent scaling, returning
+    /// a [Quantized] value.
     pub fn new(value: f64, exponent: i8) -> Self {
         let quantized = (value * 10.0_f64.powi(exponent as i32)).round() as i64;
         Self {
@@ -36,9 +40,21 @@ impl Quantized {
         }
     }
 
-    /// Returns real [f64] value
-    pub fn real_value(&self) -> f64 {
+    /// Quantizes given value, automatically selecting most appropriate
+    /// scaling, returning a [Quantized] value.
+    pub fn new_auto_scaled(value: f64) -> Self {
+        let exponent = Self::find_exponent(value);
+        Self::new(value, exponent)
+    }
+
+    /// Returns real value as [f64]
+    pub fn real_value_f64(&self) -> f64 {
         self.quantized as f64 / 10.0_f64.powi(self.exponent as i32)
+    }
+
+    /// Returns real value as [f32]
+    pub fn real_value_f32(&self) -> f32 {
+        self.real_value_f64() as f32
     }
 }
 
@@ -65,7 +81,7 @@ mod test {
                 exponent: 0,
             },
         );
-        assert_eq!(q.real_value(), 1.0);
+        assert_eq!(q.real_value_f64(), 1.0);
 
         let q = Quantized::new(1.0, 1);
         assert_eq!(
@@ -75,7 +91,7 @@ mod test {
                 exponent: 1,
             },
         );
-        assert_eq!(q.real_value(), 1.0);
+        assert_eq!(q.real_value_f64(), 1.0);
 
         let q = Quantized::new(1.25, 2);
         assert_eq!(
@@ -85,7 +101,7 @@ mod test {
                 exponent: 2,
             },
         );
-        assert_eq!(q.real_value(), 1.25);
+        assert_eq!(q.real_value_f64(), 1.25);
 
         let q = Quantized::new(-3.215, 3);
         assert_eq!(

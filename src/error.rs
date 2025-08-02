@@ -24,14 +24,11 @@ pub enum ParsingError {
     #[error("failed to parse map index from \"{0}\"")]
     MapIndexParsing(String),
 
-    #[error("bad grid definition")]
-    BadGridDefinition(#[from] crate::linspace::Error),
+    #[error("invalid grid definition")]
+    InvalidGridDefinition,
 
-    #[error("failed to parse {0} coordinates from \"{1}\"")]
-    CoordinatesParsing(String, String),
-
-    #[error("number of sat")]
-    NumSat,
+    #[error("error when parsing a coordinates")]
+    CoordinatesParsing,
 
     #[error("invalid epoch format")]
     EpochFormat,
@@ -39,13 +36,13 @@ pub enum ParsingError {
     #[error("epoch parsing")]
     EpochParsing,
 
-    #[error("ionex revision parsing")]
+    #[error("revision number parsing")]
     VersionParsing,
 
-    #[error("constellation parsing")]
+    #[error("constellation parsing error: {0}")]
     ConstellationParsing(#[from] ConstellationParsingError),
 
-    #[error("sv parsing")]
+    #[error("satellite parsing error: {0}")]
     SVParsing(#[from] SVParsingError),
 
     #[error("header coordinates parsing")]
@@ -57,7 +54,7 @@ pub enum ParsingError {
     #[error("mapping function parsing error")]
     MappingFunction,
 
-    #[error("hifitime parsing")]
+    #[error("datetime parsing error: {0}")]
     HifitimeParsing(#[from] HifitimeParsingError),
 
     #[error("map index parsing")]

@@ -45,38 +45,38 @@ pub(crate) fn parse_utc(s: &str) -> Result<Epoch, ParsingError> {
                     .trim()
                     .parse::<i32>()
                     .map_err(|_| ParsingError::EpochParsing)?;
-            }
+            },
             1 => {
                 m = field
                     .trim()
                     .parse::<u8>()
                     .map_err(|_| ParsingError::EpochParsing)?;
-            }
+            },
             2 => {
                 d = field
                     .trim()
                     .parse::<u8>()
                     .map_err(|_| ParsingError::EpochParsing)?;
-            }
+            },
             3 => {
                 hh = field
                     .trim()
                     .parse::<u8>()
                     .map_err(|_| ParsingError::EpochParsing)?;
-            }
+            },
             4 => {
                 mm = field
                     .trim()
                     .parse::<u8>()
                     .map_err(|_| ParsingError::EpochParsing)?;
-            }
+            },
             5 => {
                 ss = field
                     .trim()
                     .parse::<u8>()
                     .map_err(|_| ParsingError::EpochParsing)?;
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
     Ok(Epoch::from_gregorian_utc(y, m, d, hh, mm, ss, 0))

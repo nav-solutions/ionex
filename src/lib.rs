@@ -30,14 +30,20 @@ extern crate num;
 pub mod error;
 pub mod header;
 pub mod production;
-pub mod record;
+// pub mod record;
+pub mod bias;
+pub mod coordinates;
+pub mod grid;
+pub mod key;
+pub mod linspace;
+pub mod mapf;
+pub mod quantized;
+pub mod system;
+pub mod tec;
 pub mod version;
 
 mod epoch;
-mod grid;
 mod ionosphere;
-mod linspace;
-mod quantized;
 
 #[cfg(test)]
 mod tests;
@@ -50,6 +56,11 @@ use std::{
     str::FromStr,
 };
 
+use geo::{coord, Rect};
+
+/// IONEX comments are readable descriptions.
+pub type Comments = Vec<String>;
+
 use itertools::Itertools;
 
 #[cfg(feature = "flate2")]
@@ -57,21 +68,27 @@ use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 
 use std::collections::BTreeMap;
 
-use crate::{epoch::epoch_decompose, production::ProductionAttributes};
+use crate::{epoch::epoch_decompose, header::Header, production::ProductionAttributes};
 
 pub mod prelude {
     // export
     pub use crate::{
-        error::{Error, FormattingError, ParsingError},
+        bias::BiasSource,
+        coordinates::QuantizedCoordinates,
+        error::{FormattingError, ParsingError},
         grid::Grid,
         header::Header,
+        key::Key,
+        linspace::Linspace,
+        mapf::MappingFunction,
         production::*,
+        quantized::Quantized,
+        record::Record,
         system::ReferenceSystem,
+        tec::TEC,
         version::Version,
-        IONEX,
+        Comments, IONEX,
     };
-
-    pub use crate::record::{Comments, IonexKey, QuantizedCoordinates, TEC};
 
     // pub re-export
     pub use gnss::prelude::{Constellation, SV};
@@ -193,7 +210,7 @@ impl IONEX {
 
     /// Returns the map borders as [Rect]angle
     pub fn map_borders(&self) -> Rect {
-        Rect::new(coord!( { x: , y: } ), coord!( { x: , y: } ))
+        Rect::new(coord!( x: 0.0, y: 0.0 ), coord!( x: 0.0, y: 0.0))
     }
 
     /// Returns total altitude range covered, in kilometers.
@@ -232,7 +249,7 @@ impl IONEX {
             ""
         };
 
-        format!("{}{}{:03}.{:02}I", agency, doy, year,)
+        format!("{}{}{:03}.{:02}I", agency, region, doy, year)
     }
 
     /// Guesses File [ProductionAttributes] from actual record content.
@@ -249,7 +266,7 @@ impl IONEX {
 
         match first_epoch.to_gregorian_utc() {
             Some((y, _, _, _, _, _, _)) => attributes.year = y as u32,
-            _ => {}
+            _ => {},
         }
 
         let doy = first_epoch.day_of_year().round() as u32;
@@ -317,7 +334,7 @@ impl IONEX {
                 } else {
                     None
                 }
-            }
+            },
             _ => None,
         };
 
@@ -399,7 +416,7 @@ impl IONEX {
                 } else {
                     None
                 }
-            }
+            },
             _ => None,
         };
 

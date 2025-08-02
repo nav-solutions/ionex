@@ -121,4 +121,23 @@ mod test {
         let linspace = Linspace::new(-180.0, 180.0, 5.0).unwrap();
         assert_eq!(linspace.nearest_lower(-179.0), Some(-180.0));
     }
+
+    #[test]
+    fn test_grid() {
+        let default = Linspace::default();
+
+        assert_eq!(
+            default,
+            Linspace {
+                start: 0.0,
+                end: 0.0,
+                spacing: 0.0,
+            }
+        );
+
+        let linspace = Linspace::new(1.0, 10.0, 1.0).unwrap();
+
+        assert_eq!(linspace.length(), 10);
+        assert!(!linspace.is_single_point());
+    }
 }

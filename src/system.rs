@@ -2,9 +2,12 @@ use std::str::FromStr;
 
 use crate::prelude::{Constellation, ParsingError};
 
+#[cfg(doc)]
+use crate::prelude::Header;
+
 /// [ReferenceSystem] describes either reference constellations
 /// or theoretical models used in this evaluation.
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ReferenceSystem {
     /// Reference Constellation.
@@ -14,19 +17,19 @@ pub enum ReferenceSystem {
     /// and plasmasphere, up to altitude 20000 km.
     Constellation(Constellation),
 
-    /// Other observation systems
-    ObservationSystem(ObsSystem),
+    /// Evaluated using [OtherSystem].
+    Other(OtherSystem),
 
-    /// Theoretical Model.
-    /// When a theoretical model is used, refer to
-    /// the Description provided in [crate::ionex::HeaderFields]
-    /// for further explanations
-    Model(Model),
+    /// [TheoreticalModel].
+    /// When a theoretical model is used,
+    /// its parameters are given in the [Header] section.
+    Model(TheoreticalModel),
 }
 
-#[derive(Default, Debug, Clone, PartialEq, PartialOrd)]
+/// [OtherSystem] that may serve the TEC map evaluation process.
+#[derive(Default, Copy, Debug, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum ObsSystem {
+pub enum OtherSystem {
     /// BENt
     BENt,
 
@@ -62,9 +65,10 @@ impl std::fmt::Display for ObsSystem {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, PartialOrd)]
+/// Map resulting of a theoretical model.
+#[derive(Default, Copy, Debug, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum Model {
+pub enum TheoreticalModel {
     /// Mixed / combined models.
     #[default]
     MIX,

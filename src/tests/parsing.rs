@@ -64,14 +64,14 @@ mod test {
                     match data {
                         "ATX" => {
                             assert!(rinex.is_antex());
-                        }
+                        },
                         "NAV" => {
                             assert!(rinex.is_navigation_rinex());
                             assert!(rinex.epoch_iter().count() > 0); // all files have content
                             assert!(rinex.navigation_keys().count() > 0); // all files have content
                             assert!(rinex.nav_ephemeris_frames_iter().count() > 0);
                             // all files have content
-                        }
+                        },
                         "CRNX" | "OBS" => {
                             assert!(rinex.header.obs.is_some());
                             let obs_header = rinex.header.obs.clone().unwrap();
@@ -106,7 +106,7 @@ mod test {
                                     );
                                 } else {
                                     match rinex.header.constellation {
-                                        Some(Constellation::Mixed) | None => {} // can't test
+                                        Some(Constellation::Mixed) | None => {}, // can't test
                                         Some(c) => {
                                             let timescale = c.timescale().unwrap();
                                             assert!(ts == timescale,
@@ -114,11 +114,11 @@ mod test {
                                                 timescale,
                                                 ts
                                             );
-                                        }
+                                        },
                                     }
                                 }
                             }
-                        }
+                        },
                         "MET" => {
                             assert!(rinex.is_meteo_rinex());
                             assert!(rinex.epoch_iter().count() > 0); // all files have content
@@ -132,13 +132,13 @@ mod test {
                                     k.epoch.time_scale
                                 );
                             }
-                        }
+                        },
                         "CLK" => {
                             assert!(rinex.is_clock_rinex(), "badly identified CLK RINEX");
                             assert!(rinex.header.clock.is_some(), "badly formed CLK RINEX");
                             assert!(rinex.epoch_iter().count() > 0); // all files have content
                             let _ = rinex.record.as_clock().unwrap();
-                        }
+                        },
                         "IONEX" => {
                             assert!(rinex.is_ionex());
                             assert!(rinex.epoch_iter().count() > 0); // all files have content
@@ -149,7 +149,7 @@ mod test {
                                     e.time_scale
                                 );
                             }
-                        }
+                        },
                         _ => unreachable!(),
                     }
                 }

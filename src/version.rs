@@ -90,14 +90,14 @@ impl std::str::FromStr for Version {
                 let minor = minor.parse::<u8>().or(Err(ParsingError::VersionParsing))?;
 
                 Ok(Self { major, minor })
-            }
+            },
             false => {
                 let major = digits.next().ok_or(ParsingError::VersionFormat)?;
 
                 let major = major.parse::<u8>().or(Err(ParsingError::VersionParsing))?;
 
                 Ok(Self { major, minor: 0 })
-            }
+            },
         }
     }
 }

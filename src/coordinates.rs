@@ -1,24 +1,36 @@
-use crate::ionex::Quantized;
+use crate::prelude::Quantized;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+/// [QuantizedCoordinates] used in map discretization.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct QuantizedCoordinates {
     /// Quantized latitude
-    latitude: Quantized,
+    lat_ddeg: Quantized,
 
     /// Quantized longitude
-    longitude: Quantized,
+    long_ddeg: Quantized,
 
     /// Quantized altitude
-    altitude: Quantized,
+    alt_km: Quantized,
 }
 
 impl QuantizedCoordinates {
-    /// Builds new [QuantizedCoordinates] from values expressed in ddeg
-    pub fn new(
+    /// Builds new [QuantizedCoordinates] from coordinates in decimal degrees
+    /// and altitude in kilometers.
+    pub fn from_decimal_degrees(lat: f64, long: f64, alt_km: f64) -> Self {
+        Self {
+            lat_ddeg: Quantized::new_auto_scaled(lat),
+            long_ddeg: Quantized::new_auto_scaled(lat),
+            alt_km: Quantized::new_auto_scaled(alt_km),
+        }
+    }
+
+    /// Builds new [QuantizedCoordinates] from coordinates in decimal degrees,
+    /// altitude in kilometers, and using desired quantization scaling.
+    pub(crate) fn new(
         lat_ddeg: f64,
         lat_exponent: i8,
         long_ddeg: f64,
@@ -27,28 +39,28 @@ impl QuantizedCoordinates {
         alt_exponent: i8,
     ) -> Self {
         Self {
-            latitude: Quantized::new(lat_ddeg, lat_exponent),
-            longitude: Quantized::new(long_ddeg, long_exponent),
-            altitude: Quantized::new(alt_km, alt_exponent),
+            lat_ddeg: Quantized::new(lat_ddeg, lat_exponent),
+            long_ddeg: Quantized::new(long_ddeg, long_exponent),
+            alt_km: Quantized::new(alt_km, alt_exponent),
         }
     }
 
     /// Builds new [QuantizedCoordinates] from [Quantized] coordinates
     pub(crate) fn from_quantized(
-        latitude: Quantized,
-        longitude: Quantized,
-        altitude: Quantized,
+        lat_ddeg: Quantized,
+        long_ddeg: Quantized,
+        alt_km: Quantized,
     ) -> Self {
         Self {
-            latitude,
-            longitude,
-            altitude,
+            lat_ddeg,
+            long_ddeg,
+            alt_km,
         }
     }
 
     /// Returns latitude in degrees
     pub fn latitude_ddeg(&self) -> f64 {
-        self.latitude.real_value()
+        self.latitude.real_value_f64()
     }
 
     /// Returns latitude in radians
@@ -58,9 +70,9 @@ impl QuantizedCoordinates {
 
     /// Returns longitude in degrees
     pub fn longitude_ddeg(&self) -> f64 {
-        self.longitude.real_value()
+        self.longitude.real_value_f64()
     }
-    
+
     /// Returns longitude in radians
     pub fn longitude_rad(&self) -> f64 {
         self.longitude_ddeg().to_radians()
@@ -68,7 +80,7 @@ impl QuantizedCoordinates {
 
     /// Returns longitude in kilometers
     pub fn altitude_km(&self) -> f64 {
-        self.altitude.real_value()
+        self.altitude.real_value_f64()
     }
 }
 

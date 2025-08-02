@@ -79,7 +79,7 @@ pub fn generic_test(
                     "parsed invalid GPS/QZSS message: \"{}\"",
                     k.msgtype,
                 );
-            }
+            },
             Constellation::Galileo => {
                 let expected = [
                     NavMessageType::LNAV,
@@ -91,7 +91,7 @@ pub fn generic_test(
                     "parsed invalid Galileo message: \"{}\"",
                     k.msgtype,
                 );
-            }
+            },
             Constellation::BeiDou => {
                 let expected = [
                     NavMessageType::D1,
@@ -106,7 +106,7 @@ pub fn generic_test(
                     "parsed invalid BeiDou message: \"{}\"",
                     k.msgtype,
                 );
-            }
+            },
             Constellation::Glonass => {
                 let expected = [NavMessageType::LNAV, NavMessageType::FDMA];
                 assert!(
@@ -114,8 +114,8 @@ pub fn generic_test(
                     "parsed invalid Glonass message: \"{}\"",
                     k.msgtype,
                 );
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 }

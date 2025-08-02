@@ -1,9 +1,8 @@
 //! IONEX maps parsing
 
-use crate::{
-    ionex::{IonexKey, Quantized, QuantizedCoordinates, Record, TEC},
-    prelude::{Epoch, ParsingError},
-};
+use crate::prelude::{
+    Epoch, ParsingError, IonexKey, Quantized, QuantizedCoordinates,
+    Record, Tec};
 
 pub fn is_new_tec_map(line: &str) -> bool {
     line.contains("START OF TEC MAP")

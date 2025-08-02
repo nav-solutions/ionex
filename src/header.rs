@@ -46,8 +46,8 @@ pub struct Header {
     /// Mean earth radius or bottom of height grid, in km.
     pub base_radius: f32,
 
-    /// Reference grid definition.
-    pub grid: Grid3d,
+    /// Map [Grid] definition.
+    pub grid: Grid,
 
     /// Minimum elevation angle filter used. In degrees.
     pub elevation_cutoff: f32,
@@ -75,8 +75,8 @@ impl Default for Header {
     fn default() -> Self {
         Self {
             // default exponent value
-            // this is very important: it allows to support
-            // the parsing of IONEX that omit the exponent
+            // this is very important: it allows to parse correctly
+            // files that omit the exponent
             exponent: -1,
             number_of_maps: 0,
             // 2D by default
@@ -91,9 +91,9 @@ impl Default for Header {
             nb_stations: 0,
             nb_satellites: 0,
             dcbs: HashMap::new(),
-            reference: RefSystem::default(),
             epoch_of_last_map: Epoch::default(),
             epoch_of_first_map: Epoch::default(),
+            reference_system: ReferenceSystem::default(),
         }
     }
 }
@@ -117,7 +117,7 @@ impl Header {
         writeln!(
             w,
             "{}",
-            fmt_rinex(
+            fmt_ionex(
                 &format!("{} {} {}", start, end, spacing),
                 "HGT1 / HGT2 / DHGT"
             )
@@ -133,7 +133,7 @@ impl Header {
         writeln!(
             w,
             "{}",
-            fmt_rinex(
+            fmt_ionex(
                 &format!("{} {} {}", start, end, spacing),
                 "LAT1 / LAT2 / DLAT"
             )
@@ -149,7 +149,7 @@ impl Header {
         writeln!(
             w,
             "{}",
-            fmt_rinex(
+            fmt_ionex(
                 &format!("{} {} {}", start, end, spacing),
                 "LON1 / LON2 / DLON"
             )
@@ -159,7 +159,7 @@ impl Header {
         writeln!(
             w,
             "{}",
-            fmt_rinex(&format!("{}", self.elevation_cutoff), "ELEVATION CUTOFF")
+            fmt_ionex(&format!("{}", self.elevation_cutoff), "ELEVATION CUTOFF")
         )?;
 
         // mapping function
@@ -167,17 +167,17 @@ impl Header {
             writeln!(
                 w,
                 "{}",
-                fmt_rinex(&format!("{:?}", map_f), "MAPPING FUNCTION")
+                fmt_ionex(&format!("{:?}", map_f), "MAPPING FUNCTION")
             )?;
         } else {
-            writeln!(w, "{}", fmt_rinex("NONE", "MAPPING FUNCTION"))?;
+            writeln!(w, "{}", fmt_ionex("NONE", "MAPPING FUNCTION"))?;
         }
 
         // time of first map
-        writeln!(w, "{}", fmt_rinex("TODO", "EPOCH OF FIRST MAP"))?;
+        writeln!(w, "{}", fmt_ionex("TODO", "EPOCH OF FIRST MAP"))?;
 
         // time of last map
-        writeln!(w, "{}", fmt_rinex("TODO", "EPOCH OF LAST MAP"))?;
+        writeln!(w, "{}", fmt_ionex("TODO", "EPOCH OF LAST MAP"))?;
 
         Ok(())
     }
@@ -203,10 +203,10 @@ impl Header {
         s
     }
 
-    /// Copies and builds Self with given Reference System
-    pub fn with_reference_system(&self, reference: RefSystem) -> Self {
+    /// Copies and builds Self with updated [ReferenceSystem].
+    pub fn with_reference_system(&self, reference: ReferenceSystem) -> Self {
         let mut s = self.clone();
-        s.reference = reference;
+        s.reference_system = reference;
         s
     }
 

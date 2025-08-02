@@ -1,9 +1,14 @@
-use crate::prelude::*;
-
-use crate::epoch;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use thiserror::Error;
+
+use crate::prelude::{
+    Quantized,
+    Key,
+    Epoch,
+    TEC,
+    Header,
+};
 
 pub(crate) fn is_new_tec_plane(line: &str) -> bool {
     line.contains("START OF TEC MAP")
@@ -17,28 +22,8 @@ pub(crate) fn is_new_rms_plane(line: &str) -> bool {
 //     line.contains("START OF HEIGHT MAP")
 // }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct TEC {
-    /// TEC value
-    pub tec: f64,
-
-    /// RMS(tec)
-    pub rms: Option<f64>,
-}
-
-pub type Record = BTreeMap<IonexKey, TEC>;
-
-/*
- * Merges `rhs` into `lhs`
- */
-fn merge_plane_mut(lhs: &mut TECPlane, rhs: &TECPlane) {
-    for (coord, tec) in rhs {
-        if lhs.get(coord).is_none() {
-            lhs.insert(*coord, tec.clone());
-        }
-    }
-}
+/// [Record] describes IONEX data.
+pub type Record = BTreeMap<Key, TEC>;
 
 /*
  * Parses following map, which can either be

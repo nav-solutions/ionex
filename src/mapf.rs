@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum MappingFunction {
-    /// cos-1(z)
+    /// Model is 1/cos(z)
     CosZ,
 
     /// Qfactor

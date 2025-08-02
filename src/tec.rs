@@ -1,10 +1,10 @@
-use crate::ionex::Quantized;
+use crate::prelude::Quantized;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Total Electron Content (TEC) estimate
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TEC {
     /// TEC quantized in TEcu
@@ -20,31 +20,27 @@ pub struct TEC {
 impl TEC {
     /// Builds new [TEC] from TEC estimate expressed in TECu (=10^16 m-2)
     pub fn from_tecu(tecu: f64) -> Self {
-        let exponent = Quantized::find_exponent(tecu);
         Self {
             rms: None,
             height: None,
-            tecu: Quantized::new(tecu, exponent),
+            tecu: Quantized::new_auto_scaled(tecu),
         }
     }
 
     /// Builds new [TEC] from raw TEC estimate in m^-2
     pub fn from_tec_m2(tec: f64) -> Self {
         let tecu = tec / 10.0E16;
-        let exponent = Quantized::find_exponent(tecu);
         Self {
             rms: None,
             height: None,
-            tecu: Quantized::new(tecu, exponent),
+            tecu: Quantized::new_auto_scaled(tecu),
         }
     }
 
-    /// Builds new [TEC] estimate with associated RMS value
-    pub fn with_rms(&self, rms: f64) -> Self {
-        let mut s = self.clone();
-        let exponent = Quantized::find_exponent(rms);
-        s.rms = Some(Quantized::new(rms, exponent));
-        s
+    /// Copyes and returns [Self] with update TEC RMS.
+    pub fn with_rms(mut self, rms: f64) -> Self {
+        self.rms = Some(Quantized::auto_scaled(rms));
+        self
     }
 
     /// Builds new [TEC] from TEC quantization in TECu
@@ -70,7 +66,7 @@ impl TEC {
 
     /// Returns Total Electron Content estimate, in TECu (=10^-16 m-2)
     pub fn tecu(&self) -> f64 {
-        self.tecu.real_value()
+        self.tecu.real_value_f64()
     }
 
     /// Returns Total Electron Content estimate, in m-2
@@ -78,35 +74,10 @@ impl TEC {
         self.tecu() * 10.0E16
     }
 
-    /// Returns Root Mean Square (TEC) if it was provided.
-    pub fn rms_tec(&self) -> Option<f64> {
+    /// Returns TEC Root Mean Square (if determined).
+    pub fn tec_root_mean_square(&self) -> Option<f64> {
         let rms = self.rms?;
-        Some(rms.real_value())
-    }
-
-    // /// Returns possible altitude offset [km]
-    // pub(crate) fn height_offset_km(&self) -> Option<f64> {
-    //     let height = self.height?;
-    //     Some(height.real_value())
-    // }
-}
-
-#[cfg(feature = "qc")]
-use qc_traits::{Merge, MergeError};
-
-#[cfg(feature = "qc")]
-impl Merge for TEC {
-    fn merge(&self, rhs: &Self) -> Result<Self, MergeError> {
-        let mut s = self.clone();
-        s.merge_mut(&rhs)?;
-        Ok(s)
-    }
-
-    fn merge_mut(&mut self, rhs: &Self) -> Result<(), MergeError> {
-        if self.rms.is_none() {
-            self.rms = rhs.rms.clone();
-        }
-        Ok(())
+        Some(rms.real_value_f64())
     }
 }
 
