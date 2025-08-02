@@ -1,6 +1,6 @@
 use std::ops::Rem;
 
-use crate::prelude::ParsingError;
+use crate::error::ParsingError;
 
 /// Linear space as used in IONEX or Antenna grid definitions.
 /// Linear space starting from `start` ranging to `end` (included).

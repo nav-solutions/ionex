@@ -101,22 +101,25 @@ impl std::str::FromStr for ProductionAttributes {
 
 #[cfg(test)]
 mod test {
-    use super::ProductionAttributes;
+    use super::*;
     use std::str::FromStr;
 
     #[test]
     fn filenames() {
         for (filename, name, year, doy, region) in [
-            ("CKMG0020.22I", "CKM", 2022, 2, 'G'),
-            ("CKMG0090.21I", "CKM", 2021, 9, 'G'),
-            ("jplg0010.17i", "JPL", 2017, 1, 'G'),
+            ("CKMG0020.22I", "CKM", 2022, 2, Region::Global),
+            ("CKMG0090.21I", "CKM", 2021, 9, Region::Global),
+            ("jplg0010.17i", "JPL", 2017, 1, Region::Global),
+            ("jplr0010.17i", "JPL", 2017, 1, Region::Regional),
         ] {
             println!("Testing IONEX filename \"{}\"", filename);
+
             let attrs = ProductionAttributes::from_str(filename).unwrap();
-            assert_eq!(attrs.name, name);
+
+            assert_eq!(attrs.agency, agency);
             assert_eq!(attrs.year, year);
             assert_eq!(attrs.doy, doy);
-            assert_eq!(attrs.region, Some(region));
+            assert_eq!(attrs.region, region);
         }
     }
 }

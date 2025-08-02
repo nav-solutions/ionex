@@ -59,7 +59,7 @@ mod test {
             assert_eq!(parsed, value);
 
             let formatted = parsed.to_string();
-            assert_eq!(formatted, value);
+            assert_eq!(formatted, content);
         }
     }
 }

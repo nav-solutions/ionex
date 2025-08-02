@@ -34,6 +34,9 @@ pub struct Header {
     /// Possible file license
     pub license: Option<String>,
 
+    /// Possible Digital Object ID (DOI)
+    pub doi: Option<String>,
+
     /// Total number of TEC maps
     pub number_of_maps: usize,
 
@@ -104,6 +107,7 @@ impl Default for Header {
             run_by: Default::default(),
             date: Default::default(),
             license: Default::default(),
+            doi: Default::default(),
         }
     }
 }

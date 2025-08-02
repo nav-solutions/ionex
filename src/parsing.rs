@@ -1,9 +1,13 @@
 use crate::{
     error::ParsingError,
+    grid::GridSpecs,
     prelude::{Comments, Epoch, Header, Key, Quantized, QuantizedCoordinates, Record, TEC},
 };
 
-use std::io::{BufRead, BufReader, Read};
+use std::{
+    io::{BufRead, BufReader, Read},
+    str::FromStr,
+};
 
 fn is_new_tec_map(line: &str) -> bool {
     line.contains("START OF TEC MAP")
@@ -15,46 +19,6 @@ fn is_new_rms_map(line: &str) -> bool {
 
 fn is_new_height_map(line: &str) -> bool {
     line.contains("START OF HEIGHT MAP")
-}
-
-/// Parses Map grid to follow, returns
-/// - fixed_latitude [ddeg]
-/// - long1 [ddeg]
-/// - long_spacing [ddeg]
-/// - fixed_altitude [km]
-fn parse_grid_specs(line: &str) -> Result<(f64, f64, f64, f64), ParsingError> {
-    let (fixed_lat, rem) = line[2..].split_at(6);
-
-    let fixed_lat = fixed_lat
-        .trim()
-        .parse::<f64>()
-        .map_err(|_| ParsingError::GridCoordinates)?;
-
-    let (long1, rem) = rem.split_at(6);
-
-    let long1 = long1
-        .trim()
-        .parse::<f64>()
-        .map_err(|_| ParsingError::GridCoordinates)?;
-
-    // lon2 field is not used, we iterate using spacing starting @long1
-    let (_, rem) = rem.split_at(6);
-
-    let (long_spacing, rem) = rem.split_at(6);
-
-    let long_spacing = long_spacing
-        .trim()
-        .parse::<f64>()
-        .map_err(|_| ParsingError::GridCoordinates)?;
-
-    let (fixed_alt, _) = rem.split_at(6);
-
-    let fixed_alt = fixed_alt
-        .trim()
-        .parse::<f64>()
-        .map_err(|_| ParsingError::GridCoordinates)?;
-
-    return Ok((fixed_lat, long1, long_spacing, fixed_alt));
 }
 
 /// Parses all maps contained in following TEC description.
@@ -82,6 +46,8 @@ fn parse_tec_map(
     let mut long_spacing = 0.0_f64;
     let mut fixed_alt = 0.0_f64;
 
+    let mut grid_specs = GridSpecs::default();
+
     let mut long = 0.0_f64; // current longitude (pointer)
 
     for line in lines {
@@ -89,27 +55,13 @@ fn parse_tec_map(
             let (content, marker) = line.split_at(60);
 
             // Handle special cases
-            // * data scaler update
+            // * data scaling update
             // * Timestamp specs (Epoch)
-            if marker.contains("EXPONENT") {
-                // should not have been presented (handled @ higher level)
-                continue; // avoid parsing
-            } else if marker.contains("EPOCH OF CURRENT MAP") {
-                // should not have been presented (handled @ higher level)
-                continue; // avoid parsing
-            } else if marker.contains("START OF") {
-                continue; // avoid parsing
-            } else if marker.contains("LAT/LON1/LON2/DLON/H") {
-                // grid specs (to follow)
-                (fixed_lat, long1, long_spacing, fixed_alt) = parse_grid_specs(content)?;
-
-                // determine quantization exponents
-
-                long = long1; // reset pointer
+            if marker.contains("LAT/LON1/LON2/DLON/H") {
+                grid_specs = GridSpecs::from_str(content)?;
                 continue; // avoid parsing
             } else if marker.contains("END OF TEC MAP") {
-                // block conclusion
-                // don't care about block #id actually
+                // end of this block
                 return Ok(());
             }
         }
@@ -141,6 +93,7 @@ fn parse_tec_map(
             long += long_spacing;
         }
     }
+
     Ok(())
 }
 
@@ -285,10 +238,7 @@ mod test {
         Quantized,
     };
 
-    use crate::{
-        ionex::{Key, QuantizedCoordinates, Record},
-        prelude::Epoch,
-    };
+    use crate::prelude::{Epoch, Key, QuantizedCoordinates, Record};
 
     #[test]
     fn new_ionex_map() {
@@ -303,36 +253,6 @@ mod test {
         assert!(is_new_height_map(
             "1                                                   START OF HEIGHT MAP"
         ));
-    }
-
-    #[test]
-    fn grid_specs_parsing() {
-        let content =
-            "    87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H";
-
-        let (fixed_lat, long1, long_spacing, fixed_alt) = parse_grid_specs(content).unwrap();
-        assert_eq!(fixed_lat, 87.5);
-        assert_eq!(long1, -180.0);
-        assert_eq!(long_spacing, 5.0);
-        assert_eq!(fixed_alt, 450.0);
-
-        let content =
-            "     2.5-180.0 180.0   5.0 350.0                            LAT/LON1/LON2/DLON/H";
-
-        let (fixed_lat, long1, long_spacing, fixed_alt) = parse_grid_specs(content).unwrap();
-        assert_eq!(fixed_lat, 2.5);
-        assert_eq!(long1, -180.0);
-        assert_eq!(long_spacing, 5.0);
-        assert_eq!(fixed_alt, 350.0);
-
-        let content =
-            "    -2.5-180.0 180.0   5.0 250.0                            LAT/LON1/LON2/DLON/H";
-
-        let (fixed_lat, long1, long_spacing, fixed_alt) = parse_grid_specs(content).unwrap();
-        assert_eq!(fixed_lat, -2.5);
-        assert_eq!(long1, -180.0);
-        assert_eq!(long_spacing, 5.0);
-        assert_eq!(fixed_alt, 250.0);
     }
 
     #[test]

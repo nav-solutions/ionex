@@ -53,7 +53,7 @@ use std::{
     str::FromStr,
 };
 
-use geo::{coord, Rect};
+use geo::{coord, Polygon, Rect};
 
 use itertools::Itertools;
 
@@ -491,6 +491,16 @@ impl IONEX {
     pub fn first_epoch(&self) -> Option<Epoch> {
         self.epoch_iter().nth(0)
     }
+
+    /// Crop this [IONEX] to desired [Rect]angle area.
+    /// If this [IONEX] was a worldwide / Global IONEX originally,
+    /// it gets converted to regional naturally.
+    pub fn crop_rect_mut(&mut self, area: Rect) {}
+
+    /// Crop this [IONEX] to desired complex [Polygon]al area.
+    /// If this [IONEX] was a worldwide / Global IONEX originally,
+    /// it gets converted to regional naturally.
+    pub fn crop_poly_mut(&mut self, area: Polygon) {}
 }
 
 #[cfg(test)]

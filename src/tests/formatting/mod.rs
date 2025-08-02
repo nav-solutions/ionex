@@ -1,6 +1,3 @@
-pub mod header;
-pub mod obs;
-
 use std::collections::HashMap;
 use std::{io::Write, str::from_utf8};
 

@@ -130,10 +130,11 @@ mod test {
             "  2022     1     2     0     0     0                        ",
             Epoch::from_str("2022-01-02T00:00:00 UTC").unwrap(),
         )] {
-            let epoch = parse_ionex_utc(desc);
-            assert!(epoch.is_ok(), "failed to parse IONEX/UTC epoch");
-            let epoch = epoch.unwrap();
-            assert_eq!(epoch, expected, "invalid IONEX/UTC epoch");
+            let epoch = parse_utc(desc).unwrap_or_else(|e| {
+                panic!("Failed to parse datetime");
+            });
+
+            assert_eq!(epoch, expected);
         }
     }
 
