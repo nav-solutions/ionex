@@ -6,8 +6,10 @@ use crate::{ionex::IonosphereParameters, prelude::Epoch};
 pub struct IPPCoordinates {
     /// Instant the signal pierced Ionosphere, expressed as [Epoch]
     pub epoch: Epoch,
+
     /// Latitude (radians)
     pub latitude_rad: f64,
+
     /// Longitude (radians)
     pub longitude_rad: f64,
 }

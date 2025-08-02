@@ -8,14 +8,16 @@ use serde::{Deserialize, Serialize};
 pub struct QuantizedCoordinates {
     /// Quantized latitude
     latitude: Quantized,
+
     /// Quantized longitude
     longitude: Quantized,
+
     /// Quantized altitude
     altitude: Quantized,
 }
 
 impl QuantizedCoordinates {
-    /// Builds new [IonexMapCoordinates] from coordinates expressed in ddeg
+    /// Builds new [QuantizedCoordinates] from values expressed in ddeg
     pub fn new(
         lat_ddeg: f64,
         lat_exponent: i8,
@@ -31,7 +33,7 @@ impl QuantizedCoordinates {
         }
     }
 
-    /// Builds new [IonexMapCoordinates] from [Quantized] coordinates
+    /// Builds new [QuantizedCoordinates] from [Quantized] coordinates
     pub(crate) fn from_quantized(
         latitude: Quantized,
         longitude: Quantized,
@@ -49,10 +51,21 @@ impl QuantizedCoordinates {
         self.latitude.real_value()
     }
 
+    /// Returns latitude in radians
+    pub fn latitude_rad(&self) -> f64 {
+        self.latitude_ddeg().to_radians()
+    }
+
     /// Returns longitude in degrees
     pub fn longitude_ddeg(&self) -> f64 {
         self.longitude.real_value()
     }
+    
+    /// Returns longitude in radians
+    pub fn longitude_rad(&self) -> f64 {
+        self.longitude_ddeg().to_radians()
+    }
+
     /// Returns longitude in kilometers
     pub fn altitude_km(&self) -> f64 {
         self.altitude.real_value()

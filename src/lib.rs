@@ -7,9 +7,10 @@
 
 /*
  * IONEX is part of the nav-solutions framework.
+ *
  * Authors: Guillaume W. Bres <guillaume.bressaix@gmail.com> et al.
- * (cf. https://github.com/nav-solutions/ionex/graphs/contributors)
- * This framework is shipped under Mozilla Public V2 license.
+ * (cf. https://github.com/nav-solutions/ionex/graphs/contributors),
+ * licensed under Mozilla Public license V2.
  *
  * Documentation: https://github.com/nav-solutions/ionex
  */
@@ -33,7 +34,10 @@ pub mod record;
 pub mod version;
 
 mod epoch;
+mod grid;
+mod ionosphere;
 mod linspace;
+mod quantized;
 
 #[cfg(test)]
 mod tests;
@@ -53,17 +57,16 @@ use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 
 use std::collections::BTreeMap;
 
-use crate::{
-    epoch::epoch_decompose,
-    production::{DataSource, DetailedProductionAttributes, ProductionAttributes, FFU, PPU},
-};
+use crate::{epoch::epoch_decompose, production::ProductionAttributes};
 
 pub mod prelude {
     // export
     pub use crate::{
         error::{Error, FormattingError, ParsingError},
+        grid::Grid,
         header::Header,
         production::*,
+        system::ReferenceSystem,
         version::Version,
         IONEX,
     };
@@ -107,6 +110,9 @@ pub(crate) fn fmt_comment(content: &str) -> String {
 
 #[derive(Clone, Debug)]
 /// [IONEX] is composed of a [Header] section and a [Record] section.
+/// It is the discrete estimation of the Total Electron Content (TEC)
+/// over a plane layer or volume of the ionosphere.
+///
 /// ```
 /// use ionex::prelude::*;
 ///
@@ -117,6 +123,7 @@ pub(crate) fn fmt_comment(content: &str) -> String {
 /// // like file standard revision:
 /// assert_eq!(ionex.header.version.major, 2);
 /// assert_eq!(ionex.header.version.minor, 11);
+///
 /// ```
 pub struct IONEX {
     /// [Header] gives general information and describes following content.
@@ -172,6 +179,31 @@ impl IONEX {
     /// Replace [Record] with mutable access.
     pub fn replace_record(&mut self, record: Record) {
         self.record = record.clone();
+    }
+
+    /// Returns true if this [IONEX] is 2D (planar TEC map, not 3D volume).
+    pub fn is_2d(&self) -> bool {
+        self.header.map_dimension == 2
+    }
+
+    /// Returns true if this [IONEX] is 3D
+    pub fn is_3d(&self) -> bool {
+        !self.is_2d()
+    }
+
+    /// Returns the map borders as [Rect]angle
+    pub fn map_borders(&self) -> Rect {
+        Rect::new(coord!( { x: , y: } ), coord!( { x: , y: } ))
+    }
+
+    /// Returns total altitude range covered, in kilometers.
+    pub fn altitude_width_km(&self) -> f64 {
+        self.header.grid.altitude.width()
+    }
+
+    /// Returns Total Electron Content ([TEC]) Iterator
+    pub fn tec_maps_iter(&self) -> Box<dyn Iterator<Item = (IonexKey, &TEC)> + '_> {
+        self.record.iter()
     }
 
     /// Returns a file name that would describe [Self] according to the
@@ -418,9 +450,7 @@ impl IONEX {
         }
         false
     }
-}
 
-impl IONEX {
     /// Returns [Epoch] Iterator.
     pub fn epoch_iter(&self) -> Box<dyn Iterator<Item = Epoch> + '_> {
         Box::new(self.record.iter().map(|(k, _)| k.epoch))

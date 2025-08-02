@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     fmt_ionex,
     linspace::Linspace,
-    prelude::{BiasSource, Epoch, FormattingError, Grid, MappingFunction, RefSystem},
+    prelude::{BiasSource, Epoch, FormattingError, Grid, MappingFunction, ReferenceSystem},
 };
 
 use std::{
@@ -27,9 +27,9 @@ pub struct Header {
     /// Epoch of last map
     pub epoch_of_last_map: Epoch,
 
-    /// Reference system used for following TEC maps,
-    /// cf. [system::RefSystem].
-    pub reference: RefSystem,
+    /// [ReferenceSystem] used in the following evaluation
+    /// of the TEC maps.
+    pub reference_system: ReferenceSystem,
 
     /// It is highly recommended to give a brief description
     /// of the technique, model.. description is not a
@@ -46,24 +46,25 @@ pub struct Header {
     /// Mean earth radius or bottom of height grid, in km.
     pub base_radius: f32,
 
-    /// Reference rid definition.
-    pub grid: Grid,
+    /// Reference grid definition.
+    pub grid: Grid3d,
 
     /// Minimum elevation angle filter used. In degrees.
     pub elevation_cutoff: f32,
 
-    /// Verbose description of observables used in determination.
-    /// When no Observables were used, that means we're based off a theoretical model.
+    /// Description of the observables processed during the
+    /// TEC map determination. TEC maps based on theoretical
+    /// models will not provide any observable.
     pub observables: Option<String>,
 
-    /// Number of stations that contributed to following data
+    /// Number of stations that contributed to following results.
     pub nb_stations: u32,
 
-    /// Number of satellites that contributed to following data
+    /// Number of satellites that contributed to following results.
     pub nb_satellites: u32,
 
     /// exponent: scaling to apply in current TEC blocs
-    pub exponent: i8,
+    exponent: i8,
 
     /// Differential Code Biases (DBCs),
     /// per Vehicle #PRN, (Bias and RMS bias) values.

@@ -6,7 +6,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Quantized {
+    /// Exponent (scaling)
     pub exponent: i8,
+
+    /// Quantized value
     pub quantized: i64,
 }
 

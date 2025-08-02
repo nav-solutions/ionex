@@ -12,10 +12,11 @@ pub enum Error {
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub enum Region {
-    /// Local / Regional IONEX
+    /// Local IONEX (Regional maps)
     Regional,
 
-    /// Global / Worldwide IONEX
+    /// Global IONEX (Worldwide maps)
+    #[default]
     Global,
 }
 

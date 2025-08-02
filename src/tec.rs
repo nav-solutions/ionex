@@ -9,8 +9,10 @@ use serde::{Deserialize, Serialize};
 pub struct TEC {
     /// TEC quantized in TEcu
     tecu: Quantized,
+
     /// RMS (TEC)
     rms: Option<Quantized>,
+
     /// Altitude offset for complex 3D height map
     height: Option<Quantized>,
 }

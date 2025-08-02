@@ -13,9 +13,6 @@ pub(crate) fn is_new_rms_plane(line: &str) -> bool {
     line.contains("START OF RMS MAP")
 }
 
-/*
- * Don't know what Height maps are actually
- */
 // pub(crate) fn is_new_height_map(line: &str) -> bool {
 //     line.contains("START OF HEIGHT MAP")
 // }
@@ -30,47 +27,7 @@ pub struct TEC {
     pub rms: Option<f64>,
 }
 
-pub type TECPlane = HashMap<(i32, i32), TEC>;
-
-/// IONEX contains 2D (fixed altitude) or 3D Ionosphere Maps.
-/// See [Rinex::ionex] and related feature for more information.
-/// ```
-/// use rinex::prelude::*;
-/// use rinex::ionex::*;
-/// let rinex = Rinex::from_file("../data/IONEX/V1/CKMG0020.22I.gz")
-///     .unwrap();
-/// assert_eq!(rinex.is_ionex(), true);
-/// assert_eq!(rinex.is_ionex_2d(), true);
-/// if let Some(params) = rinex.header.ionex {
-///     assert_eq!(params.grid.height.start, 350.0); // 2D: record uses
-///     assert_eq!(params.grid.height.end, 350.0); // fixed altitude
-///     assert_eq!(params.grid.latitude.start, 87.5);
-///     assert_eq!(params.grid.latitude.end, -87.5);
-///     assert_eq!(params.grid.latitude.spacing, -2.5); // latitude granularity (degrees)
-///     assert_eq!(params.grid.longitude.start, -180.0);
-///     assert_eq!(params.grid.longitude.end, 180.0);
-///     assert_eq!(params.grid.longitude.spacing, 5.0); // longitude granularity (degrees)
-///     assert_eq!(params.exponent, -1); // data scaling. May vary accross epochs.
-///                             // so this is only the last value encountered
-///     assert_eq!(params.elevation_cutoff, 0.0);
-///     assert_eq!(params.mapping, None); // no mapping function
-/// }
-/// ```
-pub type Record = BTreeMap<(Epoch, i32), TECPlane>;
-
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("failed to parse map index from \"{0}\"")]
-    MapIndexParsing(String),
-    #[error("faulty epoch description")]
-    EpochDescriptionError,
-    #[error("bad grid definition")]
-    BadGridDefinition(#[from] crate::linspace::Error),
-    #[error("failed to parse {0} coordinates from \"{1}\"")]
-    CoordinatesParsing(String, String),
-    #[error("failed to parse epoch")]
-    EpochParsing(#[from] epoch::ParsingError),
-}
+pub type Record = BTreeMap<IonexKey, TEC>;
 
 /*
  * Merges `rhs` into `lhs`
@@ -263,70 +220,6 @@ pub(crate) fn merge_mut(lhs: &mut Record, rhs: &Record) -> Result<(), MergeError
         }
     }
     Ok(())
-}
-
-#[cfg(feature = "processing")]
-pub(crate) fn ionex_mask_mut(rec: &mut Record, mask: &MaskFilter) {
-    match mask.operand {
-        MaskOperand::Equals => match mask.item {
-            FilterItem::EpochItem(epoch) => rec.retain(|(e, _), _| *e == epoch),
-            _ => {} // FilterItem:: does not apply
-        },
-        MaskOperand::NotEquals => match mask.item {
-            FilterItem::EpochItem(epoch) => rec.retain(|(e, _), _| *e != epoch),
-            _ => {} // FilterItem:: does not apply
-        },
-        MaskOperand::GreaterEquals => match mask.item {
-            FilterItem::EpochItem(epoch) => rec.retain(|(e, _), _| *e >= epoch),
-            _ => {} // FilterItem:: does not apply
-        },
-        MaskOperand::GreaterThan => match mask.item {
-            FilterItem::EpochItem(epoch) => rec.retain(|(e, _), _| *e > epoch),
-            _ => {} // FilterItem:: does not apply
-        },
-        MaskOperand::LowerEquals => match mask.item {
-            FilterItem::EpochItem(epoch) => rec.retain(|(e, _), _| *e <= epoch),
-            _ => {} // FilterItem:: does not apply
-        },
-        MaskOperand::LowerThan => match mask.item {
-            FilterItem::EpochItem(epoch) => rec.retain(|(e, _), _| *e < epoch),
-            _ => {} // FilterItem:: does not apply
-        },
-    }
-}
-
-#[cfg(feature = "processing")]
-pub(crate) fn ionex_decim_mut(rec: &mut Record, f: &DecimationFilter) {
-    if f.item.is_some() {
-        todo!("targetted decimation not supported yet");
-    }
-    match f.filter {
-        DecimationFilterType::Modulo(r) => {
-            let mut i = 0;
-            rec.retain(|_, _| {
-                let retained = (i % r) == 0;
-                i += 1;
-                retained
-            });
-        }
-        DecimationFilterType::Duration(interval) => {
-            let mut last_retained = Option::<Epoch>::None;
-            rec.retain(|(e, _), _| {
-                if let Some(last) = last_retained {
-                    let dt = *e - last;
-                    if dt >= interval {
-                        last_retained = Some(*e);
-                        true
-                    } else {
-                        false
-                    }
-                } else {
-                    last_retained = Some(*e);
-                    true // always retain 1st epoch
-                }
-            });
-        }
-    }
 }
 
 #[cfg(test)]

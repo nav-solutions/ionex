@@ -18,8 +18,17 @@ pub enum ParsingError {
     #[error("empty epoch")]
     EmptyEpoch,
 
-    #[error("invalid epoch flag")]
-    EpochFlag,
+    #[error("faulty epoch description")]
+    EpochDescriptionError,
+
+    #[error("failed to parse map index from \"{0}\"")]
+    MapIndexParsing(String),
+
+    #[error("bad grid definition")]
+    BadGridDefinition(#[from] crate::linspace::Error),
+
+    #[error("failed to parse {0} coordinates from \"{1}\"")]
+    CoordinatesParsing(String, String),
 
     #[error("number of sat")]
     NumSat,

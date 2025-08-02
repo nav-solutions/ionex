@@ -9,8 +9,10 @@ use crate::prelude::ParsingError;
 pub struct Linspace {
     /// First value
     pub start: f64,
+
     /// Last value (included)
     pub end: f64,
+
     /// Spacing (increment)
     pub spacing: f64,
 }
@@ -43,6 +45,11 @@ impl Linspace {
                 Err(ParsingError::BadIonexGridSpecs)
             }
         }
+    }
+
+    /// Returns total width
+    pub fn width(&self) -> f64 {
+        self.end - self.start
     }
 
     /// Returns grid length, in terms of data points

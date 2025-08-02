@@ -2,20 +2,21 @@ use std::str::FromStr;
 
 use crate::prelude::{Constellation, ParsingError};
 
-/// RefSystem "Reference System" describes either reference GNSS
-/// constellation, from which TEC maps were evaluated,
-/// or theoretical model used
+/// [ReferenceSystem] describes either reference constellations
+/// or theoretical models used in this evaluation.
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum RefSystem {
+pub enum ReferenceSystem {
     /// Reference Constellation.
     /// When `Mixed` this generally means GPS + Glonass.
     /// When GNSS constellation was used, TEC maps
     /// include electron content through the ionosphere
     /// and plasmasphere, up to altitude 20000 km.
-    GnssConstellation(Constellation),
+    Constellation(Constellation),
+
     /// Other observation systems
     ObservationSystem(ObsSystem),
+
     /// Theoretical Model.
     /// When a theoretical model is used, refer to
     /// the Description provided in [crate::ionex::HeaderFields]
@@ -28,13 +29,16 @@ pub enum RefSystem {
 pub enum ObsSystem {
     /// BENt
     BENt,
+
     /// ENVisat is an ESA Earth Observation satellite
     #[default]
     ENVisat,
+
     /// European Remote Sensing Satellite (ESA).
     /// ERS-1 or ERS-2 were Earth observation satellites.
     /// Now replaced by ENVisat.
     ERS,
+
     /// IRI: Earth Observation Application group
     IRI,
 }
@@ -64,8 +68,10 @@ pub enum Model {
     /// Mixed / combined models.
     #[default]
     MIX,
+
     /// NNS transit
     NNS,
+
     /// TOP means TOPex.
     /// TOPex/TEC represents the ionosphere electron content
     /// measured over sea surface at altitudes below
@@ -129,10 +135,9 @@ mod test {
     use super::*;
     #[test]
     fn test_refsystem() {
-        let default = RefSystem::default();
         assert_eq!(
-            default,
-            RefSystem::GnssConstellation(Constellation::default())
+            ReferenceSystem::default(),
+            ReferenceSystem::Constellation(Default::default())
         );
     }
 }
