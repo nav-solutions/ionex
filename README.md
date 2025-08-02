@@ -9,17 +9,13 @@ IONEX
 [![MRSV](https://img.shields.io/badge/MSRV-1.82.0-orange?style=for-the-badge)](https://github.com/rust-lang/rust/releases/tag/1.82.0)
 [![License](https://img.shields.io/badge/license-MPL_2.0-orange?style=for-the-badge&logo=mozilla)](https://github.com/nav-solutions/ionex/blob/main/LICENSE)
 
-
 `ionex` is small library to parse IONEX files. IONEX (Ionosphere Maps) are RINEX-like 
 ASCII files that describe an estimate of the Total Electron Density (TEC) in the 
-Ionosphere layer. 
+Ionosphere. The fileset describes its evolution over time (for files that describe more than one map).
+For 3D (volumic files), the total volume is quantized, with an altitude quantization width
+specified in the file header.
 
-To contribute to either of our project or join our community, you way
-- open an [Issue on Github.com](https://github.com/nav-solutions/ionex/issues) 
-- follow our [Discussions on Github.com](https://github.com/nav-solutions/discussions)
-- join our [Discord channel](https://discord.gg/EqhEBXBmJh)
-
-## Advantages :rocket: 
+## Advantages
 
 - Fast
 - Open sources: read and access all the code
@@ -37,9 +33,11 @@ If you need to reference this work, please use the following model:
 
 ## Contributions
 
-Contributions are welcomed, do not hesitate to open new issues
-and submit Pull Requests through Github. Join us on Discord for more detailed
-discussions.
+Contributions are welcomed:
+
+- open an [Issue on Github.com](https://github.com/nav-solutions/ionex/issues) 
+- follow our [Discussions on Github.com](https://github.com/nav-solutions/discussions)
+- join our [Discord channel](https://discord.gg/EqhEBXBmJh)
 
 ## Getting started
 
