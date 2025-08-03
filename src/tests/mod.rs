@@ -5,6 +5,8 @@ mod filename;
 pub mod formatting;
 mod parsing;
 
+mod v1;
+
 use log::LevelFilter;
 use std::sync::Once;
 

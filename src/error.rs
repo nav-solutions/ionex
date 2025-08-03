@@ -27,6 +27,12 @@ pub enum ParsingError {
     #[error("invalid grid definition")]
     InvalidGridDefinition,
 
+    #[error("failed to parse number of maps")]
+    NumberofMaps,
+
+    #[error("failed to parse sampling period")]
+    SamplingPeriod,
+
     #[error("error when parsing a coordinates")]
     CoordinatesParsing,
 

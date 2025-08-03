@@ -1,7 +1,10 @@
-//! `RINEX` revision description
+//! IONEX file revision
 use crate::prelude::ParsingError;
 
-/// Version is used to describe RINEX standards revisions.
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
+/// [Version] is used to describe the file revision.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Version {
@@ -13,9 +16,9 @@ pub struct Version {
 }
 
 impl Default for Version {
-    /// Builds a default `Version` object
+    /// Returns a default v1.0 [Version]
     fn default() -> Self {
-        Version::new(4, 0)
+        Version::new(1, 0)
     }
 }
 
@@ -117,26 +120,19 @@ mod test {
 
     #[test]
     fn version() {
-        let version = Version::from_str("1");
-        assert!(version.is_ok());
-        let version = version.unwrap();
-        assert_eq!(version.major, 1);
-        assert_eq!(version.minor, 0);
+        for (version_str, major, minor) in
+            [("1.0", 1, 0), ("1.2", 1, 2), ("2.0", 2, 0), ("3.2", 3, 2)]
+        {
+            let version = Version::from_str(version_str).unwrap_or_else(|e| {
+                panic!("Failed to parse version from \"{}\"", version_str);
+            });
 
-        let version = Version::from_str("1.2");
-        assert!(version.is_ok());
-        let version = version.unwrap();
-        assert_eq!(version.major, 1);
-        assert_eq!(version.minor, 2);
+            assert_eq!(version.major, major);
+            assert_eq!(version.minor, minor);
 
-        let version = Version::from_str("3.02");
-        assert!(version.is_ok());
-        let version = version.unwrap();
-        assert_eq!(version.major, 3);
-        assert_eq!(version.minor, 2);
-
-        let version = Version::from_str("a.b");
-        assert!(version.is_err());
+            let formatted = version.to_string();
+            assert_eq!(formatted, version_str);
+        }
     }
 
     #[test]

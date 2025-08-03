@@ -24,8 +24,7 @@ pub struct Header {
     /// Name of production software
     pub program: Option<String>,
 
-    /// Name of operator (usually agency in IONEX)
-    /// running this software
+    /// Name of operator (usually name of agency) running this software.
     pub run_by: Option<String>,
 
     /// Product date and time as readable string
@@ -37,13 +36,13 @@ pub struct Header {
     /// Possible Digital Object ID (DOI)
     pub doi: Option<String>,
 
-    /// Total number of TEC maps
-    pub number_of_maps: usize,
+    /// Total number of maps described.
+    pub number_of_maps: u32,
 
-    /// Epoch of first map
+    /// [Epoch] of first map.
     pub epoch_of_first_map: Epoch,
 
-    /// Epoch of last map
+    /// [Epoch] of last map.
     pub epoch_of_last_map: Epoch,
 
     /// [ReferenceSystem] used in the following evaluation
@@ -52,7 +51,7 @@ pub struct Header {
 
     /// It is highly recommended to give a brief description
     /// of the technique, model.. description is not a
-    /// general purpose comment
+    /// general purpose comment.
     pub description: Option<String>,
 
     /// Mapping function adopted for TEC determination,
@@ -192,24 +191,24 @@ impl Header {
         Ok(())
     }
 
-    /// Copies self and returns with updated number of maps
-    pub fn with_number_of_maps(&self, num: usize) -> Self {
+    /// Copies [Self], returning with an updated number of Maps (total).
+    pub fn with_number_of_maps(&self, number: u32) -> Self {
         let mut s = self.clone();
-        s.number_of_maps = num;
+        s.number_of_maps = number;
         s
     }
 
-    /// Copies self with given time of first map
-    pub fn with_epoch_of_first_map(&self, t: Epoch) -> Self {
+    /// Copies [Self], returning with an updated [Epoch] of first Map.
+    pub fn with_epoch_of_first_map(&self, epoch: Epoch) -> Self {
         let mut s = self.clone();
-        s.epoch_of_first_map = t;
+        s.epoch_of_first_map = epoch;
         s
     }
 
-    /// Copies self with given time of last map
-    pub fn with_epoch_of_last_map(&self, t: Epoch) -> Self {
+    /// Copies [Self], returning with an updated [Epoch] of last Map.
+    pub fn with_epoch_of_last_map(&self, epoch: Epoch) -> Self {
         let mut s = self.clone();
-        s.epoch_of_last_map = t;
+        s.epoch_of_last_map = epoch;
         s
     }
 
