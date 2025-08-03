@@ -1,4 +1,7 @@
-use crate::prelude::{Duration, MappingFunction, ReferenceSystem, Version, IONEX};
+use crate::{
+    prelude::{Duration, MappingFunction, ReferenceSystem, Version, IONEX},
+    tests::toolkit::{generic_test, TestPoint},
+};
 
 #[test]
 fn parse_ckmg0020() {
@@ -7,6 +10,19 @@ fn parse_ckmg0020() {
     });
 
     assert!(ionex.is_2d());
+    assert!(!ionex.is_3d());
+
+    generic_test(
+        &ionex,
+        vec![TestPoint {
+            epoch_str: "2022-01-02T00:00:00 UTC",
+            lat_ddeg: 87.5,
+            long_ddeg: -180.0,
+            alt_km: 350.0,
+            tecu: 92.0,
+            rms: None,
+        }],
+    );
 
     assert_eq!(ionex.header.version, Version::new(1, 0));
 
@@ -18,19 +34,19 @@ fn parse_ckmg0020() {
     assert!(ionex.header.license.is_none());
 
     assert_eq!(ionex.header.number_of_maps, 25);
+
     assert_eq!(
         ionex.header.epoch_of_first_map.to_string().as_str(),
         "2022-01-02T00:00:00 UTC"
     );
+
     assert_eq!(
         ionex.header.epoch_of_last_map.to_string().as_str(),
         "2022-01-03T00:00:00 UTC"
     );
 
-    // assert_eq!(ionex.header.reference_system, ReferenceSystem::);
-
-    assert_eq!(ionex.header.mapf, MappingFunction::None);
     assert_eq!(ionex.header.base_radius_km, 6371.0);
+    assert_eq!(ionex.header.mapf, MappingFunction::None);
 
     assert_eq!(ionex.header.sampling_period, Duration::from_hours(1.0));
 
@@ -54,6 +70,7 @@ fn parse_ckmg0020() {
         ionex.header.comments[0],
         "CODE'S KLOBUCHAR-STYLE IONOSPHERE MODEL FOR DAY 002, 2022"
     );
+
     assert_eq!(
         ionex.header.comments[1],
         "TEC/RMS values in 0.1 TECU; 9999, if no value available"

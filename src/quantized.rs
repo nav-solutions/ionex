@@ -32,7 +32,7 @@ impl Quantized {
 
     /// Quantizes given value, using exponent scaling, returning
     /// a [Quantized] value.
-    pub fn new(value: f64, exponent: i8) -> Self {
+    pub(crate) fn new(value: f64, exponent: i8) -> Self {
         let quantized = (value * 10.0_f64.powi(exponent as i32)).round() as i64;
         Self {
             quantized,
