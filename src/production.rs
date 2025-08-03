@@ -51,10 +51,38 @@ pub struct ProductionAttributes {
     pub gzip_compressed: bool,
 }
 
-impl ProductionAttributes {
-    /// Format [Self] as standardized file name
-    pub(crate) fn format(name: &str, region: char, ddd: &str, yy: &str) -> String {
-        format!("{}{}{}0.{}I", name, region, ddd, yy,)
+impl std::fmt::Display for ProductionAttributes {
+    #[cfg(feature = "flate2")]
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let len = std::cmp::min(self.agency.len(), 3);
+
+        write!(
+            f,
+            "{}{}{:03}0.{:02}I",
+            &self.agency[..len],
+            self.region,
+            self.doy,
+            self.year - 2000
+        )?;
+
+        if self.gzip_compressed {
+            write!(f, ".gz")?;
+        }
+
+        Ok(())
+    }
+
+    #[cfg(not(feature = "flate2"))]
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let len = std::cmp::min(self.agency.len(), 3);
+        write!(
+            f,
+            "{}{}{:03}0.{:02}I",
+            &self.agency[..len],
+            self.region,
+            self.doy,
+            self.year - 2000
+        )
     }
 }
 
@@ -72,13 +100,13 @@ impl std::str::FromStr for ProductionAttributes {
 
         let offset = filename.find('.').unwrap_or(0);
 
-        let agency = filename[..4].to_string();
+        let agency = filename[..3].to_string();
 
         let year = filename[offset + 1..offset + 3]
             .parse::<u32>()
             .map_err(|_| Error::NonStandardFilename)?;
 
-        let region = if filename[4..5].eq("G") {
+        let region = if filename[3..4].eq("G") {
             Region::Global
         } else {
             Region::Regional
@@ -87,14 +115,14 @@ impl std::str::FromStr for ProductionAttributes {
         Ok(Self {
             region,
             agency,
-            year: year + 2_000, // year uses 2 digit in old format
             doy: {
                 filename[4..7]
                     .parse::<u32>()
                     .map_err(|_| Error::NonStandardFilename)?
             },
+            year: year + 2_000,
             #[cfg(feature = "flate2")]
-            gzip_compressed: filename.ends_with(".gz"),
+            gzip_compressed: filename.ends_with(".GZ"),
         })
     }
 }
@@ -105,12 +133,13 @@ mod test {
     use std::str::FromStr;
 
     #[test]
-    fn filenames() {
+    fn standard_filenames() {
         for (filename, agency, year, doy, region) in [
             ("CKMG0020.22I", "CKM", 2022, 2, Region::Global),
             ("CKMG0090.21I", "CKM", 2021, 9, Region::Global),
-            ("jplg0010.17i", "JPL", 2017, 1, Region::Global),
-            ("jplr0010.17i", "JPL", 2017, 1, Region::Regional),
+            ("JPLG0010.17I", "JPL", 2017, 1, Region::Global),
+            ("JPLR0010.17I", "JPL", 2017, 1, Region::Regional),
+            ("JPLR0010.17I", "JPL", 2017, 1, Region::Regional),
         ] {
             println!("Testing IONEX filename \"{}\"", filename);
 
@@ -120,6 +149,31 @@ mod test {
             assert_eq!(attrs.year, year);
             assert_eq!(attrs.doy, doy);
             assert_eq!(attrs.region, region);
+            assert!(!attrs.gzip_compressed);
+
+            let formatted = attrs.to_string();
+            assert_eq!(formatted, filename);
+        }
+    }
+
+    #[test]
+    fn gzip_filenames() {
+        for (filename, agency, year, doy, region) in [
+            ("CKMG0020.22I.gz", "CKM", 2022, 2, Region::Global),
+            ("CKMR0020.22I.gz", "CKM", 2022, 2, Region::Regional),
+            ("JPLG0010.17I.gz", "JPL", 2017, 1, Region::Global),
+            ("CKMR0020.22I.gz", "CKM", 2022, 2, Region::Regional),
+        ] {
+            let attrs = ProductionAttributes::from_str(filename).unwrap();
+
+            assert_eq!(attrs.agency, agency);
+            assert_eq!(attrs.year, year);
+            assert_eq!(attrs.doy, doy);
+            assert_eq!(attrs.region, region);
+            assert!(attrs.gzip_compressed);
+
+            let formatted = attrs.to_string();
+            assert_eq!(formatted, filename);
         }
     }
 }
