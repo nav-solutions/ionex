@@ -22,9 +22,9 @@ impl std::str::FromStr for MappingFunction {
     type Err = ParsingError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Q" => Ok(Self::QFactor),
+            "QFAC" => Ok(Self::QFactor),
             "NONE" => Ok(Self::None),
-            "COS" | "cosine" => Ok(Self::CosZ),
+            "COSZ" | "cosine" => Ok(Self::CosZ),
             _ => Err(ParsingError::MappingFunction),
         }
     }
@@ -33,8 +33,8 @@ impl std::str::FromStr for MappingFunction {
 impl std::fmt::Display for MappingFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::CosZ => write!(f, "COS"),
-            Self::QFactor => write!(f, "Q"),
+            Self::CosZ => write!(f, "COSZ"),
+            Self::QFactor => write!(f, "QFAC"),
             Self::None => write!(f, "NONE"),
         }
     }
@@ -49,7 +49,7 @@ mod test {
     fn mapping_function() {
         for (content, value) in [
             ("COSZ", MappingFunction::CosZ),
-            ("Q-Factor", MappingFunction::QFactor),
+            ("QFAC", MappingFunction::QFactor),
             ("NONE", MappingFunction::None),
         ] {
             let parsed = MappingFunction::from_str(content).unwrap_or_else(|e| {
