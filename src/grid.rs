@@ -67,7 +67,7 @@ impl std::str::FromStr for GridSpecs {
 
     /// Parses [GridSpecs] from standardized line
     fn from_str(line: &str) -> Result<Self, Self::Err> {
-        if line.len() != 60 {
+        if line.len() < 60 {
             return Err(ParsingError::InvalidGridDefinition);
         }
 
@@ -129,11 +129,11 @@ mod test {
     fn grid_specs_parsing() {
         for (lat_ddeg, long1_ddeg, long2_ddeg, dlon_ddeg, alt_km, content) in [
             (
-                87.5,
+                2.5,
                 -180.0,
                 180.0,
                 5.0,
-                450.0,
+                350.0,
                 "     2.5-180.0 180.0   5.0 350.0                            LAT/LON1/LON2/DLON/H",
             ),
             (
