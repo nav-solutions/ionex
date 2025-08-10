@@ -29,6 +29,7 @@ pub(crate) fn parse_record<R: Read>(
 
     let mut grid_specs = GridSpecs::default();
     let mut next_grid_specs = GridSpecs::default();
+
     let mut long_ptr = 0.0_f64;
 
     let mut record = Record::default();
@@ -126,7 +127,6 @@ pub(crate) fn parse_record<R: Read>(
             // block parsing attempt
             if marker.contains("END OF") || grid_specs_update {
                 skip = true;
-                debug!("{} BLOCK \"{}\"", epoch, epoch_buf);
 
                 for item in epoch_buf.split_ascii_whitespace() {
                     let item = item.trim();
@@ -199,6 +199,14 @@ pub(crate) fn parse_record<R: Read>(
 
             if marker.contains("END OF FILE") {
                 eos = true;
+            }
+
+            if marker.contains("END OF RMS MAP") {
+                rms_map = false;
+            }
+
+            if marker.contains("END OF HEIGHT MAP") {
+                height_map = false;
             }
         } // line > 60
 

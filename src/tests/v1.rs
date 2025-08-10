@@ -107,6 +107,10 @@ fn parse_ckmg0020() {
         ionex.header.comments[1],
         "TEC/RMS values in 0.1 TECU; 9999, if no value available"
     );
+
+    for (k, v) in ionex.record.iter() {
+        panic!("K={:?} V={}", k, v.tecu());
+    }
 }
 
 #[test]

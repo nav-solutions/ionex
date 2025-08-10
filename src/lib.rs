@@ -350,6 +350,7 @@ impl IONEX {
         let fd = File::open(path)?;
 
         let mut reader = BufReader::new(fd);
+
         let mut ionex = Self::parse(&mut reader)?;
         ionex.production = file_attributes;
 
@@ -433,8 +434,8 @@ impl IONEX {
 
         let reader = GzDecoder::new(fd);
         let mut reader = BufReader::new(reader);
-        let mut ionex = Self::parse(&mut reader)?;
 
+        let mut ionex = Self::parse(&mut reader)?;
         ionex.production = file_attributes;
 
         Ok(ionex)
