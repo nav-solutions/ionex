@@ -19,14 +19,40 @@ fn parse_ckmg0020() {
 
     generic_test(
         &ionex,
-        vec![TestPoint {
-            epoch_str: "2022-01-02T00:00:00 UTC",
-            lat_ddeg: 87.5,
-            long_ddeg: -180.0,
-            alt_km: 350.0,
-            tecu: 92.0,
-            rms: None,
-        }],
+        vec![
+            //TestPoint {
+            //    epoch_str: "2022-01-02T00:00:00 UTC",
+            //    lat_ddeg: 87.5,
+            //    long_ddeg: -180.0,
+            //    alt_km: 350.0,
+            //    tecu: 92.0,
+            //    rms: None,
+            //},
+            //TestPoint {
+            //    epoch_str: "2022-01-02T00:00:00 UTC",
+            //    lat_ddeg: 87.5,
+            //    long_ddeg: -175.0,
+            //    alt_km: 350.0,
+            //    tecu: 92.0,
+            //    rms: None,
+            //},
+            //TestPoint {
+            //    epoch_str: "2022-01-02T00:00:00 UTC",
+            //    lat_ddeg: 87.5,
+            //    long_ddeg: -170.0,
+            //    alt_km: 350.0,
+            //    tecu: 92.0,
+            //    rms: None,
+            //},
+            TestPoint {
+                epoch_str: "2022-01-02T00:00:00 UTC",
+                lat_ddeg: 85.0,
+                long_ddeg: -180.0,
+                alt_km: 350.0,
+                tecu: 92.0,
+                rms: None,
+            },
+        ],
     );
 
     assert_eq!(ionex.header.version, Version::new(1, 0));
