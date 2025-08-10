@@ -24,3 +24,5 @@ target
 
 *.swo
 *.swp
+
+test.txt

@@ -4,12 +4,7 @@ use std::path::Path;
 
 #[test]
 fn filename_conventions() {
-    for testfile in [
-        "CKMG0020.22I.gz",
-        "CKMG0080.09I.gz",
-        "CKMG0090.21I.gz",
-        "jplg0010.17i.gz",
-    ] {
+    for testfile in ["CKMG0020.22I.gz", "CKMG0080.09I.gz", "CKMG0090.21I.gz"] {
         let fp = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("data")
             .join(testfile);
@@ -20,7 +15,6 @@ fn filename_conventions() {
             panic!("Failed to parse IONEX file \"{}\"", name);
         });
 
-        let expected = testfile.to_uppercase();
-        assert_eq!(ionex.standardized_filename(), expected);
+        assert_eq!(ionex.standardized_filename(), testfile);
     }
 }

@@ -39,6 +39,12 @@ pub struct Header {
     /// Total number of maps described.
     pub number_of_maps: u32,
 
+    /// Number of ground stations that contributed to this estimate
+    pub num_stations: u32,
+
+    /// Number of satellites that contributed to this estimate
+    pub num_satellites: u16,
+
     /// [Epoch] of first map.
     pub epoch_of_first_map: Epoch,
 
@@ -74,7 +80,7 @@ pub struct Header {
     pub elevation_cutoff: f32,
 
     /// exponent: scaling to apply in current TEC blocs
-    exponent: i8,
+    pub(crate) exponent: i8,
 
     /// Comments found in the header section
     pub comments: Comments,
@@ -93,6 +99,8 @@ impl Default for Header {
             mapf: Default::default(),
             comments: Default::default(),
             description: Default::default(),
+            num_stations: Default::default(),
+            num_satellites: Default::default(),
             elevation_cutoff: 0.0,
             // Standard Earth radius [km]
             base_radius_km: 6371.0,

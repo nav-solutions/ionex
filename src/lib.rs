@@ -255,7 +255,7 @@ impl IONEX {
             ""
         };
 
-        format!("{}{}{:03}.{:02}I{}", agency, region, doy, year, extension)
+        format!("{}{}{:03}0.{:02}I{}", agency, region, doy, year, extension)
     }
 
     /// Guesses File [ProductionAttributes] from actual record content.

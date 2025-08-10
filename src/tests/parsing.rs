@@ -1,7 +1,7 @@
 use crate::prelude::IONEX;
 
 #[test]
-fn gzip_repo_parsing() {
+fn repo_parsing() {
     let prefix = "data/IONEX/V1";
 
     for file in std::fs::read_dir(prefix).unwrap() {
@@ -15,10 +15,14 @@ fn gzip_repo_parsing() {
             continue;
         }
 
-        if filename.ends_with(".gz") {
-            println!("parsing \"{}\"", fullpath);
+        println!("parsing \"{}\"", fullpath);
 
+        if filename.ends_with(".gz") {
             let ionex = IONEX::from_gzip_file(fullpath).unwrap_or_else(|e| {
+                panic!("Failed to parse \"{}\": {}", fullpath, e);
+            });
+        } else {
+            let ionex = IONEX::from_file(fullpath).unwrap_or_else(|e| {
                 panic!("Failed to parse \"{}\": {}", fullpath, e);
             });
         }
