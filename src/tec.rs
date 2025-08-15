@@ -4,7 +4,7 @@ use crate::prelude::Quantized;
 use serde::{Deserialize, Serialize};
 
 /// Total Electron Content (TEC) estimate
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TEC {
     /// TEC quantized in TEcu
@@ -27,6 +27,12 @@ impl TEC {
         }
     }
 
+    /// Updates this [TEC] with new TECu value
+    pub fn with_tecu(mut self, tecu: f64) -> Self {
+        self.tecu = Quantized::new_auto_scaled(tecu);
+        self
+    }
+
     /// Builds new [TEC] from raw TEC estimate in m^-2
     pub fn from_tec_m2(tec: f64) -> Self {
         let tecu = tec / 10.0E16;
@@ -35,6 +41,13 @@ impl TEC {
             height: None,
             tecu: Quantized::new_auto_scaled(tecu),
         }
+    }
+
+    /// Updates this [TEC] with new TEC value in m^-2
+    pub fn with_tec_m2(mut self, tec: f64) -> Self {
+        let tecu = tec / 10.0E16;
+        self.tecu = Quantized::new_auto_scaled(tecu);
+        self
     }
 
     /// Copyes and returns [Self] with update TEC RMS.

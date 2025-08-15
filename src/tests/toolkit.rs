@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::prelude::{Epoch, Header, Key, Quantized, QuantizedCoordinates, IONEX};
+use crate::prelude::{Epoch, Header, Key, Quantized, QuantizedCoordinates, IONEX, TEC};
 
 /// Verifies two [Header]s are strictly identical
 pub fn generic_header_comparison(dut: &Header, model: &Header) {
@@ -55,6 +55,12 @@ pub struct TestPoint<'a> {
     pub rms: Option<f64>,
 }
 
+impl<'a> TestPoint<'a> {
+    pub fn quantize(&self) -> QuantizedCoordinates {
+        QuantizedCoordinates::from_decimal_degrees(self.lat_ddeg, self.long_ddeg, self.alt_km)
+    }
+}
+
 /// Verifies that all data points do not have RMS value (otherwise panics)
 pub fn check_no_root_mean_square(dut: &IONEX) {
     for (k, v) in dut.record.iter() {
@@ -70,32 +76,78 @@ pub fn check_no_root_mean_square(dut: &IONEX) {
 }
 
 /// Verifies all test points in a [IONEX].
-pub fn generic_test(dut: &IONEX, test_points: Vec<TestPoint>) {
+pub fn generic_test(dut: &IONEX, test_points: Vec<TestPoint>, angles_err_deg: f64, alt_err_m: f64) {
     for test_point in test_points.iter() {
+        let mut found = false;
+        let mut tec = TEC::default();
         let epoch = Epoch::from_str(test_point.epoch_str).unwrap();
 
-        let coordinates = QuantizedCoordinates::from_quantized(
-            Quantized::new_auto_scaled(test_point.lat_ddeg),
-            Quantized::new_auto_scaled(test_point.long_ddeg),
-            Quantized::new_auto_scaled(test_point.alt_km),
-        );
-
+        let coordinates = test_point.quantize();
         let key = Key { epoch, coordinates };
 
-        let tec = dut.record.get(&key).expect(&format!(
-            "missing data @{} (lat={};long={};z={})",
-            test_point.epoch_str, test_point.lat_ddeg, test_point.long_ddeg, test_point.alt_km
-        ));
+        for (k, v) in dut.record.iter() {
+            let latitude_err = (k.latitude_ddeg() - test_point.lat_ddeg).abs();
+            let longitude_err = (k.longitude_ddeg() - test_point.long_ddeg).abs();
+            let alt_err = (k.altitude_km() - test_point.alt_km).abs() * 1.0E3;
+
+            if latitude_err < angles_err_deg
+                && longitude_err < angles_err_deg
+                && alt_err < alt_err_m
+            {
+                if k.altitude_km() == test_point.alt_km {
+                    tec = *v;
+                    found = true;
+                }
+            }
+        }
+
+        if !found {
+            panic!(
+                "missing data @{} (lat={}°, long={}°, z={}km)",
+                test_point.epoch_str, test_point.lat_ddeg, test_point.long_ddeg, test_point.alt_km,
+            );
+        }
 
         let tecu = tec.tecu();
-
         let error = (tecu - test_point.tecu).abs();
 
         assert!(
             error < 1.0E-5,
-            "invalid tec value: {} but {} is expected",
+            "({} lat={}° long={}° alt={}km) - invalid tec value: {} but {} is expected",
+            test_point.epoch_str,
+            test_point.lat_ddeg,
+            test_point.long_ddeg,
+            test_point.alt_km,
             tecu,
             test_point.tecu
         );
+    }
+}
+
+#[test]
+fn test_helpers() {
+    for (lat_ddeg, long_ddeg, alt_km) in [
+        (87.5, -180.0, 350.0),
+        (87.5, 180.0, 350.0),
+        (87.5, 180.5, 300.0),
+        (-10.5, 180.5, 300.0),
+        (-30.5, 180.5, 300.0),
+        (10.5, 150.5, 300.0),
+        (30.5, 151.5, 300.0),
+    ] {
+        let testpoint = TestPoint {
+            epoch_str: "2022-01-02T00:00:00 UTC",
+            lat_ddeg,
+            long_ddeg,
+            alt_km,
+            tecu: 92.0,
+            rms: None,
+        };
+
+        let quantized = testpoint.quantize();
+
+        assert_eq!(quantized.latitude_ddeg(), lat_ddeg);
+        assert_eq!(quantized.longitude_ddeg(), long_ddeg);
+        assert_eq!(quantized.altitude_km(), alt_km);
     }
 }

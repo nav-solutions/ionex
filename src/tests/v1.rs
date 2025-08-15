@@ -20,40 +20,99 @@ fn parse_ckmg0020() {
     generic_test(
         &ionex,
         vec![
-            //TestPoint {
-            //    epoch_str: "2022-01-02T00:00:00 UTC",
-            //    lat_ddeg: 87.5,
-            //    long_ddeg: -180.0,
-            //    alt_km: 350.0,
-            //    tecu: 92.0,
-            //    rms: None,
-            //},
-            //TestPoint {
-            //    epoch_str: "2022-01-02T00:00:00 UTC",
-            //    lat_ddeg: 87.5,
-            //    long_ddeg: -175.0,
-            //    alt_km: 350.0,
-            //    tecu: 92.0,
-            //    rms: None,
-            //},
-            //TestPoint {
-            //    epoch_str: "2022-01-02T00:00:00 UTC",
-            //    lat_ddeg: 87.5,
-            //    long_ddeg: -170.0,
-            //    alt_km: 350.0,
-            //    tecu: 92.0,
-            //    rms: None,
-            //},
             TestPoint {
                 epoch_str: "2022-01-02T00:00:00 UTC",
-                lat_ddeg: 85.0,
+                lat_ddeg: 87.5,
                 long_ddeg: -180.0,
                 alt_km: 350.0,
-                tecu: 92.0,
+                tecu: 9.2,
+                rms: None,
+            },
+            TestPoint {
+                epoch_str: "2022-01-02T00:00:00 UTC",
+                lat_ddeg: 87.5,
+                long_ddeg: -175.0,
+                alt_km: 350.0,
+                tecu: 9.2,
+                rms: None,
+            },
+            TestPoint {
+                epoch_str: "2022-01-02T00:00:00 UTC",
+                lat_ddeg: 87.5,
+                long_ddeg: -170.0,
+                alt_km: 350.0,
+                tecu: 9.2,
+                rms: None,
+            },
+            TestPoint {
+                epoch_str: "2022-01-02T00:00:00 UTC",
+                lat_ddeg: 87.5,
+                long_ddeg: 0.0,
+                alt_km: 350.0,
+                tecu: 9.2,
+                rms: None,
+            },
+            TestPoint {
+                epoch_str: "2022-01-02T00:00:00 UTC",
+                lat_ddeg: 87.5,
+                long_ddeg: -5.0,
+                alt_km: 350.0,
+                tecu: 9.2,
+                rms: None,
+            },
+            TestPoint {
+                epoch_str: "2022-01-02T00:00:00 UTC",
+                lat_ddeg: 87.5,
+                long_ddeg: 5.0,
+                alt_km: 350.0,
+                tecu: 9.2,
+                rms: None,
+            },
+            TestPoint {
+                epoch_str: "2022-01-02T05:00:00 UTC",
+                lat_ddeg: -82.5,
+                long_ddeg: -180.0,
+                alt_km: 350.0,
+                tecu: 13.2,
+                rms: None,
+            },
+            TestPoint {
+                epoch_str: "2022-01-02T05:00:00 UTC",
+                lat_ddeg: -87.5,
+                long_ddeg: -180.0,
+                alt_km: 350.0,
+                tecu: 13.2,
+                rms: None,
+            },
+            TestPoint {
+                epoch_str: "2022-01-02T05:00:00 UTC",
+                lat_ddeg: -87.5,
+                long_ddeg: 175.5,
+                alt_km: 350.0,
+                tecu: 13.6,
+                rms: None,
+            },
+            TestPoint {
+                epoch_str: "2022-01-02T06:00:00 UTC",
+                lat_ddeg: 87.5,
+                long_ddeg: -180.0,
+                alt_km: 350.0,
+                tecu: 9.2,
                 rms: None,
             },
         ],
+        0.1,
+        1.0,
     );
+
+    // check no RMS value
+    for (k, tec) in ionex.record.iter() {
+        // verify RMS map
+        assert!(tec.root_mean_square().is_none());
+
+        // fixed altitude (2D)
+        assert_eq!(k.altitude_km(), 350.0);
+    }
 
     assert_eq!(ionex.header.version, Version::new(1, 0));
 
@@ -107,10 +166,6 @@ fn parse_ckmg0020() {
         ionex.header.comments[1],
         "TEC/RMS values in 0.1 TECU; 9999, if no value available"
     );
-
-    for (k, v) in ionex.record.iter() {
-        panic!("K={:?} V={}", k, v.tecu());
-    }
 }
 
 #[test]
@@ -127,14 +182,24 @@ fn parse_jplg() {
     generic_test(
         &ionex,
         vec![TestPoint {
-            epoch_str: "2022-01-02T00:00:00 UTC",
+            epoch_str: "2017-01-01T00:00:00 UTC",
             lat_ddeg: 87.5,
             long_ddeg: -180.0,
-            alt_km: 350.0,
-            tecu: 92.0,
+            alt_km: 450.0,
+            tecu: 3.3,
             rms: None,
         }],
+        0.1,
+        1.0,
     );
+
+    for (k, tec) in ionex.record.iter() {
+        // verify RMS map
+        assert!(tec.root_mean_square().is_some());
+
+        // fixed altitude (2D)
+        assert_eq!(k.altitude_km(), 450.0);
+    }
 
     assert_eq!(ionex.header.version, Version::new(1, 0));
 

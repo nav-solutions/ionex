@@ -20,7 +20,6 @@ pub(crate) fn parse_record<R: Read>(
 ) -> Result<(Record, Comments), ParsingError> {
     let mut eos = false;
     let mut new_map = false;
-
     let mut rms_map = false;
     let mut height_map = false;
 
@@ -28,17 +27,16 @@ pub(crate) fn parse_record<R: Read>(
     let mut epoch = header.epoch_of_first_map;
 
     let mut grid_specs = GridSpecs::default();
-    let mut next_grid_specs = GridSpecs::default();
+    let mut next_grid_specs = grid_specs.clone();
 
-    let mut long_ptr = 0.0_f64;
+    let mut long_ptr = 0.0;
+    let mut longitude_exponent = 0i8;
 
     let mut record = Record::default();
     let mut comments = Comments::default();
 
     let mut line_buf = String::with_capacity(128);
     let mut epoch_buf = String::with_capacity(1024);
-
-    let mut longitude_exponent = 0i8;
 
     let latitude_exponent: i8 = Quantized::find_exponent(header.grid.latitude.spacing);
     let altitude_exponent: i8 = Quantized::find_exponent(header.grid.altitude.spacing);
@@ -50,16 +48,16 @@ pub(crate) fn parse_record<R: Read>(
         }
 
         let mut skip = false;
-        let mut grid_specs_update = false;
+        let mut grid_specs_updated = false;
 
         if line_buf.len() > 60 {
             let (content, marker) = line_buf.split_at(60);
 
             // COMMENTS are stored as is
             if marker.contains("COMMENTS") {
+                skip = true;
                 let comment = line_buf.split_at(60).0.trim_end();
                 comments.push(comment.to_string());
-                skip = true;
             }
 
             // Scaling update
@@ -76,68 +74,64 @@ pub(crate) fn parse_record<R: Read>(
                 trace!("{} exponent updated to {}", epoch, exponent);
             }
 
+            // Epoch update
             if marker.contains("EPOCH OF CURRENT MAP") {
                 skip = true;
                 epoch = parse_utc_epoch(content)?;
             }
 
+            // New map
             if marker.contains("START OF TEC MAP") {
+                skip = true;
                 rms_map = false;
                 height_map = false;
-                skip = true;
             }
 
+            // New RMS map
             if marker.contains("START OF RMS MAP") {
+                skip = true;
                 rms_map = true;
                 height_map = false;
-                skip = true;
             }
 
+            // New height map
             if marker.contains("START OF HEIGHT MAP") {
+                skip = true;
                 rms_map = false;
                 height_map = true;
-                skip = true;
             }
 
+            // Specs update
             if marker.contains("LAT/LON1/LON2/DLON/H") {
                 skip = true;
 
                 match GridSpecs::from_str(content) {
                     Ok(specs) => {
-                        #[cfg(feature = "log")]
-                        trace!(
-                            "updated grid specs (lat={}, long={} dlon={}, z={})",
-                            specs.latitude_ddeg,
-                            specs.longitude_space.start,
-                            specs.longitude_space.spacing,
-                            specs.altitude_km
-                        );
-
                         next_grid_specs = specs;
+                        grid_specs_updated = true;
                     },
                     Err(e) => {
                         error!("failed to parse grid specs: {}", e);
                     },
                 }
-
-                longitude_exponent = Quantized::find_exponent(grid_specs.longitude_space.spacing);
-                grid_specs_update = true;
             }
 
-            // block parsing attempt
-            if marker.contains("END OF") || grid_specs_update {
+            // block parsing
+            if marker.contains("END OF") || grid_specs_updated {
                 skip = true;
+
+                long_ptr = grid_specs.longitude_space.start;
 
                 for item in epoch_buf.split_ascii_whitespace() {
                     let item = item.trim();
 
-                    // handle map coordinates overflow (invalid file)
+                    // handles coordinates overflow (invalid file/specs)
                     if long_ptr > grid_specs.longitude_space.end {
                         break;
                     }
 
                     // omitted data
-                    if item.contains("9999") {
+                    if item.eq("9999") {
                         // skip parsing
                         long_ptr += grid_specs.longitude_space.spacing;
                         continue;
@@ -153,41 +147,31 @@ pub(crate) fn parse_record<R: Read>(
                             );
 
                             let coordinates = QuantizedCoordinates::from_quantized(lat, long, alt);
+
                             let key = Key { epoch, coordinates };
 
                             if rms_map {
                                 if let Some(tec) = record.get_mut(&key) {
-                                    trace!(
-                                        "{} parsed (lat={},long={},z={}) RMS={}",
-                                        epoch,
-                                        grid_specs.latitude_ddeg,
-                                        long_ptr,
-                                        grid_specs.altitude_km,
-                                        value
-                                    );
-
                                     tec.set_quantized_root_mean_square(value, exponent);
+                                } else {
+                                    let mut tec = TEC::default();
+                                    tec.set_quantized_root_mean_square(value, exponent);
+                                    record.insert(key, tec);
                                 }
                             } else if height_map {
+                                // TODO: Height map not supported.
                             } else {
-                                let tec = TEC::from_quantized(value, exponent);
-
-                                #[cfg(feature = "log")]
-                                trace!(
-                                    "{} parsed (lat={},long={},z={}) TECu={}",
-                                    epoch,
-                                    grid_specs.latitude_ddeg,
-                                    long_ptr,
-                                    grid_specs.altitude_km,
-                                    value
-                                );
-
-                                record.insert(key, tec);
+                                if let Some(tec) = record.get_mut(&key) {
+                                    *tec = tec.with_tecu(value as f64);
+                                } else {
+                                    let tec = TEC::from_quantized(value, exponent);
+                                    record.insert(key, tec);
+                                }
                             }
                         },
                         Err(e) => {
                             #[cfg(feature = "log")]
-                            error!("tecu parsing error: {}", e);
+                            error!("tecu parsing error: {} (\"{}\")", e, item);
                         },
                     } // parsing
 
@@ -214,11 +198,22 @@ pub(crate) fn parse_record<R: Read>(
             epoch_buf.push_str(&line_buf);
         }
 
-        if grid_specs_update {
+        line_buf.clear();
+
+        if grid_specs_updated {
+            #[cfg(feature = "log")]
+            trace!(
+                "updated grid specs (lat={}, long={} dlon={}, z={})",
+                next_grid_specs.latitude_ddeg,
+                next_grid_specs.longitude_space.start,
+                next_grid_specs.longitude_space.spacing,
+                next_grid_specs.altitude_km
+            );
+
+            longitude_exponent = Quantized::find_exponent(next_grid_specs.longitude_space.spacing);
+
             grid_specs = next_grid_specs;
         }
-
-        line_buf.clear();
 
         if eos {
             break;
@@ -238,12 +233,6 @@ mod test {
     //    fn tec_map_parsing() {
     //        let mut record = Record::default();
     //
-    //        let tec_exponent = -1;
-    //        let lat_exponent = Quantized::find_exponent(2.5);
-    //        let long_exponent = Quantized::find_exponent(5.0);
-    //        let alt_exponent = Quantized::find_exponent(0.0);
-    //
-    //        let epoch = Epoch::from_gregorian_utc_at_midnight(2017, 1, 1);
     //
     //        let content =
     //            "     1                                                      START OF TEC MAP

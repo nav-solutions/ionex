@@ -25,7 +25,6 @@ extern crate gnss_rs as gnss;
 extern crate num;
 
 pub mod bias;
-pub mod coordinates;
 pub mod error;
 pub mod grid;
 pub mod header;
@@ -33,15 +32,16 @@ pub mod key;
 pub mod linspace;
 pub mod mapf;
 pub mod production;
-pub mod quantized;
 pub mod system;
 pub mod tec;
 pub mod version;
 
+mod coordinates;
 mod epoch;
 mod formatting;
 mod ionosphere;
 mod parsing;
+mod quantized;
 
 #[cfg(test)]
 mod tests;

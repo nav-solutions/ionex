@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 /// [Quantized] value representing either a [TEC] estimate,
 /// or discrete coordinates as [QuantizedCoordinates].
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Quantized {
     /// Exponent (scaling)
