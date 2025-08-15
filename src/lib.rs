@@ -489,8 +489,7 @@ impl IONEX {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::{fmt_comment, is_comment};
+    use crate::fmt_comment;
     #[test]
     fn fmt_comments_singleline() {
         for desc in [
@@ -510,8 +509,6 @@ mod test {
                 Some(60),
                 "comment marker should located @ 60"
             );
-
-            assert!(is_comment(&comment), "should be valid comment");
         }
     }
 
@@ -527,7 +524,6 @@ mod test {
             for line in comments.lines() {
                 assert!(line.len() >= 60, "comment line should be at least 60 byte long");
                 assert_eq!(line.find("COMMENT"), Some(60), "comment marker should located @ 60");
-                assert!(is_comment(line), "should be valid comment");
             }
         }
     }

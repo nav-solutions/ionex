@@ -127,7 +127,6 @@ pub(crate) fn parse_record<R: Read>(
 
                 for item in epoch_buf.split_ascii_whitespace() {
                     let item = item.trim();
-                    println!("ptr={} lat={}", long_ptr, grid_specs.latitude_ddeg);
 
                     // handles coordinates overflow (invalid file/specs)
                     if long_ptr > grid_specs.longitude_space.end {

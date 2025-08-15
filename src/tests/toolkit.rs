@@ -61,20 +61,6 @@ impl<'a> TestPoint<'a> {
     }
 }
 
-/// Verifies that all data points do not have RMS value (otherwise panics)
-pub fn check_no_root_mean_square(dut: &IONEX) {
-    for (k, v) in dut.record.iter() {
-        assert!(
-            v.root_mean_square().is_none(),
-            "unexpected Root Mean Square at {}(lat={},long={},z={})",
-            k.epoch,
-            k.coordinates.latitude_ddeg(),
-            k.coordinates.longitude_ddeg(),
-            k.coordinates.altitude_km(),
-        );
-    }
-}
-
 /// Verifies all test points in a [IONEX].
 pub fn generic_test(dut: &IONEX, test_points: Vec<TestPoint>, angles_err_deg: f64, alt_err_m: f64) {
     for test_point in test_points.iter() {

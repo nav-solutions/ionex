@@ -24,14 +24,14 @@ pub fn init_logger() {
     });
 }
 
-/// Verifies this IONEX is constant (TEC map) or panics otherwise.
-pub fn ionex_is_constant(ionex: &IONEX, constant_tecu: f64) {
-    for (k, v) in ionex.record.iter() {
-        assert_eq!(v.tecu(), constant_tecu);
-    }
-}
-
-/// Verifues this IONEX is null (TEC map only) or panics otherwise.
-pub fn ionex_is_null(ionex: &IONEX) {
-    ionex_is_constant(ionex, 0.0)
-}
+// /// Verifies this IONEX is constant (TEC map) or panics otherwise.
+// pub fn ionex_is_constant(ionex: &IONEX, constant_tecu: f64) {
+//     for (k, v) in ionex.record.iter() {
+//         assert_eq!(v.tecu(), constant_tecu);
+//     }
+// }
+//
+// /// Verifues this IONEX is null (TEC map only) or panics otherwise.
+// pub fn ionex_is_null(ionex: &IONEX) {
+//     ionex_is_constant(ionex, 0.0)
+// }

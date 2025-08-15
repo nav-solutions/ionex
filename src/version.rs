@@ -124,7 +124,7 @@ mod test {
             [("1.0", 1, 0), ("1.2", 1, 2), ("2.0", 2, 0), ("3.2", 3, 2)]
         {
             let version = Version::from_str(version_str).unwrap_or_else(|e| {
-                panic!("Failed to parse version from \"{}\"", version_str);
+                panic!("Failed to parse version from \"{}\": {}", version_str, e);
             });
 
             assert_eq!(version.major, major);
