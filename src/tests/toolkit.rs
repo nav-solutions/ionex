@@ -113,7 +113,7 @@ pub fn generic_test(dut: &IONEX, test_points: Vec<TestPoint>, angles_err_deg: f6
 
         assert!(
             error < 1.0E-5,
-            "({} lat={}° long={}° alt={}km) - invalid tec value: {} but {} is expected",
+            "({} lat={}° long={}° alt={}km) - invalid TECu: {} but {} is expected",
             test_point.epoch_str,
             test_point.lat_ddeg,
             test_point.long_ddeg,

@@ -80,6 +80,7 @@ pub mod prelude {
         error::{FormattingError, ParsingError},
         grid::Grid,
         header::Header,
+        ionosphere::IonosphereParameters,
         key::Key,
         linspace::Linspace,
         mapf::MappingFunction,
@@ -101,11 +102,6 @@ pub type Comments = Vec<String>;
 
 /// [Record] describes IONEX data.
 pub type Record = BTreeMap<Key, TEC>;
-
-/// returns true if given line is a comment
-pub(crate) fn is_comment(content: &str) -> bool {
-    content.len() > 60 && content.trim_end().ends_with("COMMENT")
-}
 
 /// macro to format one header line or a comment
 pub(crate) fn fmt_ionex(content: &str, marker: &str) -> String {

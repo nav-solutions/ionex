@@ -2,7 +2,7 @@ use crate::{
     epoch::parse_utc as parse_utc_epoch,
     error::ParsingError,
     linspace::Linspace,
-    prelude::{BiasSource, Constellation, Duration, Epoch, Header, ReferenceSystem, Version},
+    prelude::{Duration, Header, Version},
 };
 
 use std::{
@@ -91,7 +91,7 @@ impl Header {
                 // latitude grid specs
                 let (start_str, rem) = content.split_at(8);
                 let (end_str, rem) = rem.split_at(6);
-                let (spacing_str, rem) = rem.split_at(6);
+                let spacing_str = rem.split_at(6).0;
 
                 let start = start_str
                     .trim()
@@ -115,7 +115,7 @@ impl Header {
                 // longitude grid specs
                 let (start_str, rem) = content.split_at(8);
                 let (end_str, rem) = rem.split_at(6);
-                let (spacing_str, rem) = rem.split_at(6);
+                let spacing_str = rem.split_at(6).0;
 
                 let start = start_str
                     .trim()
@@ -139,7 +139,7 @@ impl Header {
                 // altitude grid specs
                 let (start_str, rem) = content.split_at(8);
                 let (end_str, rem) = rem.split_at(6);
-                let (spacing_str, rem) = rem.split_at(6);
+                let spacing_str = rem.split_at(6).0;
 
                 let start = start_str
                     .trim()

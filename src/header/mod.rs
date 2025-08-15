@@ -7,8 +7,7 @@ use crate::{
     fmt_ionex,
     linspace::Linspace,
     prelude::{
-        BiasSource, Comments, Duration, Epoch, FormattingError, Grid, MappingFunction,
-        ReferenceSystem, Version,
+        Comments, Duration, Epoch, FormattingError, Grid, MappingFunction, ReferenceSystem, Version,
     },
 };
 

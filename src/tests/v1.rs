@@ -70,6 +70,22 @@ fn parse_ckmg0020() {
             },
             TestPoint {
                 epoch_str: "2022-01-02T05:00:00 UTC",
+                lat_ddeg: 87.5,
+                long_ddeg: -180.0,
+                alt_km: 350.0,
+                tecu: 9.2,
+                rms: None,
+            },
+            TestPoint {
+                epoch_str: "2022-01-02T05:00:00 UTC",
+                lat_ddeg: 25.0,
+                long_ddeg: -180.0,
+                alt_km: 350.0,
+                tecu: 23.8,
+                rms: None,
+            },
+            TestPoint {
+                epoch_str: "2022-01-02T05:00:00 UTC",
                 lat_ddeg: -82.5,
                 long_ddeg: -180.0,
                 alt_km: 350.0,

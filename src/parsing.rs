@@ -2,8 +2,7 @@ use crate::{
     epoch::parse_utc as parse_utc_epoch,
     error::ParsingError,
     grid::GridSpecs,
-    is_comment,
-    prelude::{Comments, Epoch, Header, Key, Quantized, QuantizedCoordinates, Record, TEC},
+    prelude::{Comments, Header, Key, Quantized, QuantizedCoordinates, Record, TEC},
 };
 
 use std::{
@@ -12,14 +11,17 @@ use std::{
 };
 
 #[cfg(feature = "log")]
-use log::{debug, error, trace};
+use log::{
+    //debug,
+    error,
+    trace,
+};
 
 pub(crate) fn parse_record<R: Read>(
     header: &mut Header,
     reader: &mut BufReader<R>,
 ) -> Result<(Record, Comments), ParsingError> {
     let mut eos = false;
-    let mut new_map = false;
     let mut rms_map = false;
     let mut height_map = false;
 
@@ -29,7 +31,7 @@ pub(crate) fn parse_record<R: Read>(
     let mut grid_specs = GridSpecs::default();
     let mut next_grid_specs = grid_specs.clone();
 
-    let mut long_ptr = 0.0;
+    let mut long_ptr;
     let mut longitude_exponent = 0i8;
 
     let mut record = Record::default();
@@ -48,6 +50,7 @@ pub(crate) fn parse_record<R: Read>(
         }
 
         let mut skip = false;
+
         let mut grid_specs_updated = false;
 
         if line_buf.len() > 60 {
@@ -124,6 +127,7 @@ pub(crate) fn parse_record<R: Read>(
 
                 for item in epoch_buf.split_ascii_whitespace() {
                     let item = item.trim();
+                    println!("ptr={} lat={}", long_ptr, grid_specs.latitude_ddeg);
 
                     // handles coordinates overflow (invalid file/specs)
                     if long_ptr > grid_specs.longitude_space.end {
@@ -203,7 +207,7 @@ pub(crate) fn parse_record<R: Read>(
         if grid_specs_updated {
             #[cfg(feature = "log")]
             trace!(
-                "updated grid specs (lat={}, long={} dlon={}, z={})",
+                "updated grid specs (lat={:+03.3}, long={:+03.3} dlon={:+03.1}, z={:+03.3})",
                 next_grid_specs.latitude_ddeg,
                 next_grid_specs.longitude_space.start,
                 next_grid_specs.longitude_space.spacing,
@@ -221,331 +225,4 @@ pub(crate) fn parse_record<R: Read>(
     }
 
     Ok((record, comments))
-}
-
-#[cfg(test)]
-mod test {
-    use super::Quantized;
-
-    use crate::prelude::{Epoch, Key, QuantizedCoordinates, Record};
-
-    //    #[test]
-    //    fn tec_map_parsing() {
-    //        let mut record = Record::default();
-    //
-    //
-    //        let content =
-    //            "     1                                                      START OF TEC MAP
-    //  2017     1     1     0     0     0                        EPOCH OF CURRENT MAP
-    //    87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
-    //   33   33   32   32   32   31   31   30   30   30   29   29   28   28   28   27
-    //   27   27   26   26   26   26   26   26   26   26   26   26   26   26   26   26
-    //   27   27   27   28   28   29   29   30   30   31   31   32   32   33   33   33
-    //   34   34   35   35   35   35   36   36   36   36   36   36   36   36   36   35
-    //   35   35   35   35   34   34   34   33   33
-    //    85.0-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
-    //   36   36   35   35   34   34   33   33   32   31   31   30   29   28   28   27
-    //   26   25   25   24   24   23   23   22   22   22   22   22   22   23   23   24
-    //   24   25   25   26   27   28   29   29   30   31   32   33   34   35   36   37
-    //   38   39   39   40   41   41   41   41   42   42   42   41   41   41   41   40
-    //   40   40   39   39   38   38   37   37   36
-    //    27.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
-    //   235  230  222  212  200  187  173  157  141  126  110   95   92   92   92   92
-    //    92   92   92   92   92   92   92   92   92   92   92   92   92   92   92   92
-    //    92   92   92   92   92   92   92   92   92   92   92   92   92   92   92   92
-    //    92   92   92   92   92   92   92   92   92  104  120  136  151  166  180  193
-    //   205  215  224  231  236  239  240  239  235
-    //     2.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
-    //   364  370  374  378  380  380  378  375  370  364  356  346  336  324  311  298
-    //   283  269  253  238  222  207  191  175  159  143  127  111   96   92   92   92
-    //    92   92   92   92   92   92   92   92   92   92   92   92   92   92   92   92
-    //    92   92   92   92   92  106  124  141  158  175  191  207  223  238  252  266
-    //   280  293  305  317  328  339  348  356  364
-    //    -2.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
-    //   363  370  375  380  383  385  385  384  381  376  370  363  354  343  332  319
-    //   305  291  276  260  244  227  210  194  176  159  143  126  109   93   92   92
-    //    92   92   92   92   92   92   92   92   92   92   92   92   92   92   92   92
-    //    92   92   92   92  103  120  136  152  168  183  198  212  226  240  253  266
-    //   279  291  303  315  326  336  346  355  363
-    //     1                                                      END OF TEC MAP      ";
-    //
-    //        parse_tec_map(
-    //            content,
-    //            lat_exponent,
-    //            long_exponent,
-    //            alt_exponent,
-    //            tec_exponent,
-    //            epoch,
-    //            &mut record,
-    //        )
-    //        .unwrap();
-    //
-    //        for (coordinates, quantized_tecu) in [
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    87.5,
-    //                    lat_exponent,
-    //                    -180.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                33,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    87.5,
-    //                    lat_exponent,
-    //                    -175.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                33,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    87.5,
-    //                    lat_exponent,
-    //                    -170.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                32,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    87.5,
-    //                    lat_exponent,
-    //                    170.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                34,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    87.5,
-    //                    lat_exponent,
-    //                    175.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                33,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    87.5,
-    //                    lat_exponent,
-    //                    180.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                33,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    85.0,
-    //                    lat_exponent,
-    //                    -180.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                36,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    85.0,
-    //                    lat_exponent,
-    //                    -175.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                36,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    85.0,
-    //                    lat_exponent,
-    //                    -170.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                35,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    85.0,
-    //                    lat_exponent,
-    //                    170.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                37,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    85.0,
-    //                    lat_exponent,
-    //                    175.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                37,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    85.0,
-    //                    lat_exponent,
-    //                    180.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                36,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    27.5,
-    //                    lat_exponent,
-    //                    170.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                240,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    27.5,
-    //                    lat_exponent,
-    //                    175.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                239,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    27.5,
-    //                    lat_exponent,
-    //                    180.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                235,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    2.5,
-    //                    lat_exponent,
-    //                    -170.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                374,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    2.5,
-    //                    lat_exponent,
-    //                    170.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                348,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    2.5,
-    //                    lat_exponent,
-    //                    175.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                356,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    2.5,
-    //                    lat_exponent,
-    //                    180.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                364,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    -2.5,
-    //                    lat_exponent,
-    //                    -170.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                375,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    -2.5,
-    //                    lat_exponent,
-    //                    170.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                346,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    -2.5,
-    //                    lat_exponent,
-    //                    175.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                355,
-    //            ),
-    //            (
-    //                QuantizedCoordinates::new(
-    //                    -2.5,
-    //                    lat_exponent,
-    //                    180.0,
-    //                    long_exponent,
-    //                    450.0,
-    //                    alt_exponent,
-    //                ),
-    //                363,
-    //            ),
-    //        ] {
-    //            let key = Key { epoch, coordinates };
-    //
-    //            let tec = record
-    //                .get(&key)
-    //                .expect(&format!("missing value at {:#?}", key));
-    //
-    //            let tecu = tec.tecu();
-    //            let expected = quantized_tecu as f64 * 10.0_f64.powi(tec_exponent as i32);
-    //            let err = (tecu - expected).abs();
-    //
-    //            assert!(err < 1.0E-6);
-    //        }
-    //    }
 }
