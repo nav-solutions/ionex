@@ -102,12 +102,12 @@ impl Record {
 
                     let key = Key { epoch, coordinates };
 
-                    // format map
-                    if let Some(tec) = self.get(&key) {
-                        write!(w, "{:5}", tec.tecu.quantized)?;
-                    } else {
-                        write!(w, " 9999")?; // standardized
-                    }
+                    // // format map
+                    // if let Some(tec) = self.get(&key) {
+                    //     write!(w, "{:5}", tec.tecu.quantized)?;
+                    // } else {
+                    //     write!(w, " 9999")?; // standardized
+                    // }
 
                     line_offset += FORMATTED_OFFSET;
 

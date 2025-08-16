@@ -53,8 +53,9 @@ use std::{
     str::FromStr,
 };
 
-use geo::{coord, Rect};
 use itertools::Itertools;
+
+use geo::{coord, BoundingRect, Geometry, LineString, Point, Polygon, Rect};
 
 #[cfg(feature = "flate2")]
 use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
@@ -64,7 +65,7 @@ use std::collections::BTreeMap;
 use hifitime::prelude::Epoch;
 
 use crate::{
-    cell::MapCell,
+    cell::{MapCell, MapPoint},
     error::{FormattingError, ParsingError},
     header::Header,
     key::Key,
@@ -78,7 +79,6 @@ pub mod prelude {
     pub use crate::{
         bias::BiasSource,
         cell::MapCell,
-        coordinates::QuantizedCoordinates,
         error::{FormattingError, ParsingError},
         grid::Grid,
         header::Header,
@@ -87,7 +87,6 @@ pub mod prelude {
         linspace::Linspace,
         mapf::MappingFunction,
         production::*,
-        quantized::Quantized,
         record::Record,
         system::ReferenceSystem,
         tec::TEC,
@@ -96,6 +95,7 @@ pub mod prelude {
     };
 
     // pub re-export
+    pub use geo::Point;
     pub use gnss::prelude::{Constellation, SV};
     pub use hifitime::{Duration, Epoch, TimeScale, TimeSeries};
 }
@@ -253,11 +253,6 @@ impl IONEX {
     /// Returns total altitude range covered, in kilometers.
     pub fn altitude_width_km(&self) -> f64 {
         self.header.grid.altitude.width()
-    }
-
-    /// Returns Total Electron Content ([TEC]) Iterator
-    pub fn tec_maps_iter(&self) -> Box<dyn Iterator<Item = (&Key, &TEC)> + '_> {
-        Box::new(self.record.iter())
     }
 
     /// Returns a file name that would describe [Self] according to the
@@ -525,16 +520,16 @@ impl IONEX {
             coord!( x: self.header.grid.longitude.end, y: self.header.grid.latitude.end),
         )
     }
+
     /// Converts this Global/Worldwide [IONEX] to Regional [IONEX]
-    /// restraning map to the provided borders, expressed in degrees.
-    /// Borders expressed as [Rect]angle (min, max),
-    /// where x is the longitude and y the latitude angle, both
-    /// expressed in decimal degrees.
-    pub fn to_region_degrees(&self, region: Rect) -> IONEX {
+    /// delimited by (possibly complex) bounding geometry, for which [BoundingRect] needs
+    /// to return correctly. Each boundary coordinates must also be expressed in degrees.
+    pub fn to_region_degrees(&self, region: Polygon) -> Option<IONEX> {
         let mut ionex = IONEX::default();
 
-        let (min_long, min_lat) = (region.min().x, region.min().y);
-        let (max_long, max_lat) = (region.max().x, region.max().y);
+        let bounding_rect = region.bounding_rect()?;
+        let (min_long, min_lat) = (bounding_rect.min().x, bounding_rect.min().y);
+        let (max_long, max_lat) = (bounding_rect.max().x, bounding_rect.max().y);
 
         // copy attributes
         ionex.production = self.production.clone();
@@ -562,48 +557,38 @@ impl IONEX {
             ionex.header.grid.longitude.end = max_long;
         }
 
+        let region = Geometry::Polygon(region);
+
         // restrain map
         ionex.record.map = self
             .record
             .map
             .iter()
-            .filter_map(|(k, v)| {
-                let latitude_ddeg = k.latitude_ddeg();
-                let longitude_ddeg = k.longitude_ddeg();
-
-                if latitude_ddeg >= min_lat && latitude_ddeg <= max_lat {
-                    if longitude_ddeg >= min_long && longitude_ddeg <= max_long {
-                        Some((*k, *v))
-                    } else {
-                        None
-                    }
+            .filter_map(|(k, cell)| {
+                if cell.contains(&region) {
+                    Some((*k, *cell))
                 } else {
                     None
                 }
             })
             .collect();
 
-        ionex
+        Some(ionex)
     }
 
-    /// Converts this Global/Worldwide [IONEX] to Regional [IONEX]
-    /// restraining map to the provided borders, expressed in radians.
-    /// Borders expressed as [Rect]angle (min, max),
-    /// where x is the longitude and y the latitude angle, both
-    /// expressed in radians.
-    pub fn to_region_radians(&self, region: Rect) -> IONEX {
-        self.to_region_degrees(Rect::new(
-            coord!(x: region.min().x.to_radians(), y: region.min().y.to_radians()),
-            coord!(x: region.max().x.to_radians(), y: region.max().y.to_radians()),
-        ))
-    }
-
-    /// Stretch this map returning a new [IONEX], increasing grid granularity
-    /// by applying the 2D planar interpolation equation.
+    /// Stretch this [IONEX] into a new file [IONEX], increasing grid
+    /// spatial precision and applying 2D planar interpolation.
     pub fn planar_stretch(&self, stretch_factor: f64) -> IONEX {
         let mut s = self.clone();
         s.planar_stretch_mut(stretch_factor);
         s
+    }
+
+    /// Stretch this [IONEX] into space and time, increasing
+    /// both spatial and temporal precision, by applying the 2D
+    /// planar and temporal interpolation.
+    pub fn temporal_planar_stretch(&self, stretch_factor: f64) -> IONEX {
+        Default::default()
     }
 
     /// Stretch this mutable map, increasing grid granularity

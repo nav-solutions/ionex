@@ -10,49 +10,91 @@ use itertools::Itertools;
 use std::str::FromStr;
 use thiserror::Error;
 
-use geo::Rect;
+use geo::{Geometry, Polygon, Rect};
 
-use crate::prelude::{Comments, Epoch, Header, Key, MapCell, Quantized, TEC};
+use crate::{
+    prelude::{Comments, Epoch, Header, Key, MapCell, TEC},
+    quantized::Quantized,
+};
 
-/// IONEX [Record] describes [TEC] values at specific
-/// coordinates and time
+/// IONEX [Record] contains [MapCell]s in chronological order.
 #[derive(Clone, Debug, Default)]
 pub struct Record {
-    pub(crate) map: BTreeMap<Key, TEC>,
+    pub(crate) map: BTreeMap<Epoch, MapCell>,
 }
 
 impl Record {
-    /// Insert a new [TEC] value into IONEX [Record]
-    pub fn insert(&mut self, key: Key, tec: TEC) {
-        self.map.insert(key, tec);
+    /// Insert a new [MapCell] into IONEX [Record]
+    pub fn insert(&mut self, epoch: Epoch, cell: MapCell) {
+        self.map.insert(epoch, cell);
     }
 
     /// Obtain [Record] iterator.
-    pub fn iter(&self) -> Iter<'_, Key, TEC> {
+    pub fn iter(&self) -> Iter<'_, Epoch, MapCell> {
         self.map.iter()
     }
 
+    /// Obtain [MapCell] Iterator (starting on northern eastern most to southern western most cell), at this point in time.
+    pub fn synchronous_iter(&self, epoch: Epoch) -> Box<dyn Iterator<Item = MapCell> + '_> {
+        Box::new(
+            self.iter()
+                .filter_map(move |(k, v)| if *k == epoch { Some(*v) } else { None }),
+        )
+    }
+
     /// Obtain mutable [Record] iterator.
-    pub fn iter_mut(&mut self) -> IterMut<'_, Key, TEC> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, Epoch, MapCell> {
         self.map.iter_mut()
     }
 
-    /// Obtain [TEC] value from IONEX [Record], at specified
-    /// coordinates and time, which must exist. If you want to obtain
-    /// interpolated TEC values at _any_ coordinates, you should
-    /// obtain a [MapCell] using other methods available, for example
-    /// - [Self::surface_cells_iter]
-    /// - [Self::surface_cell_at]
-    pub fn get(&self, key: &Key) -> Option<&TEC> {
-        self.map.get(key)
+    /// Obtain [MapCell] local region from IONEX [Record], at specified point in time.
+    pub fn get(&self, epoch: &Epoch) -> Option<&MapCell> {
+        self.map.get(epoch)
     }
 
-    /// Obtain [TEC] value at any coordinates and time, by applying 2D interpolation. Coordinates must be specified in degrees and kilometers.
+    /// Obtain mutable [MapCell] reference from IONEX [Record], as specified point in time.
+    pub fn get_mut(&mut self, epoch: &Epoch) -> Option<&mut MapCell> {
+        self.map.get_mut(epoch)
+    }
+
+    /// Obtain [Epoch]s Iterator in chronological order.
+    pub fn epochs_iter(&self) -> Box<dyn Iterator<Item = Epoch> + '_> {
+        Box::new(self.map.keys().unique().map(|k| *k))
+    }
+
+    /// Returns first [Epoch] in chronological order
+    pub fn first_epoch(&self) -> Option<Epoch> {
+        self.epochs_iter().nth(0)
+    }
+
+    /// Obtain the [MapCell] that contains following [Geometry] completely.
+    /// ## Input
+    /// - point: coordinates as [Point]
+    /// ## Returns
+    /// - None if map grid does not cointain these coordinates
+    /// - MapCell that wraps these coordinates
+    pub fn wrapping_map_cell(&self, geometry: &Geometry<f64>) -> Option<MapCell> {
+        let first_epoch = self.first_epoch()?;
+
+        for cell in self.synchronous_iter(first_epoch) {
+            if cell.contains(&geometry) {
+                return Some(cell);
+            }
+        }
+
+        None
+    }
+
+    /// Synchronous [MapCell] Iterators (starting on northern eastern most to souther western most cell)
+
+    /// Obtain interpolated [TEC] value at any coordinates and time,
+    /// using temporal 2D interpolation formula.
+    /// Coordinates must be specified in degrees
     /// ## Inputs
-    /// - instant as [Epoch] which must be defined
-    /// - latitude angle in degrees
-    /// - longitude angle in degrees
-    /// - altitude in kilometers
+    /// - instant as [Epoch] which should be within
+    /// the timeframe of this IONEX for the results to be correct.
+    /// - latitude angle in degrees which should lie within the map borders
+    /// - longitude angle in degrees which should lie within the map borders
     /// ## Returns
     /// - None if [Epoch] does not exit
     /// - Zero if map grid is not valid at this [Epoch]
@@ -62,53 +104,9 @@ impl Record {
         epoch: Epoch,
         latitude_ddeg: f64,
         longitude_ddeg: f64,
-        altitude_km: f64,
     ) -> Option<f64> {
         let mut ret = None;
 
         ret
-    }
-
-    /// Obtain mutable [TEC] reference from IONEX [Record], as specified
-    /// coordinates and time, if it exists.
-    pub fn get_mut(&mut self, key: &Key) -> Option<&mut TEC> {
-        self.map.get_mut(key)
-    }
-
-    /// Obtain Iterator over individual indexing [Key]s
-    pub fn keys(&self) -> Keys<'_, Key, TEC> {
-        self.map.keys()
-    }
-
-    /// Obtain [Epoch]s Iterator in chronological order.
-    pub fn epochs_iter(&self) -> Box<dyn Iterator<Item = Epoch> + '_> {
-        Box::new(self.map.keys().map(|k| k.epoch).unique())
-    }
-
-    /// Returns first [Epoch] in chronological order
-    pub fn first_epoch(&self) -> Option<Epoch> {
-        self.epochs_iter().nth(0)
-    }
-
-    /// Obtain a [Rect]angle grid Iterator, of desired latitude
-    /// and longitude widths, both expressed in degrees.
-    /// ## Inputs
-    /// - cell
-    pub fn surface_cell_iter(
-        &self,
-        cell_lat_width_deg: f64,
-        cell_long_width_deg: f64,
-    ) -> Box<dyn Iterator<Item = MapCell>> {
-        Box::new([].into_iter())
-    }
-
-    /// Obtain synchronous [MapCell] Iterator of desired latitude and longitude width (both expressed in degrees).
-    pub fn synchronous_surface_cell_iter(
-        &self,
-        epoch: Epoch,
-        cell_lat_width_deg: f64,
-        cell_long_width_deg: f64,
-    ) -> Box<dyn Iterator<Item = MapCell>> {
-        Box::new([].into_iter())
     }
 }

@@ -1,8 +1,10 @@
 use crate::{
+    coordinates::QuantizedCoordinates,
     epoch::parse_utc as parse_utc_epoch,
     error::ParsingError,
     grid::GridSpecs,
-    prelude::{Comments, Header, Key, Quantized, QuantizedCoordinates, Record, TEC},
+    prelude::{Comments, Header, Key, Record, TEC},
+    quantized::Quantized,
 };
 
 use std::{
@@ -158,22 +160,22 @@ impl Record {
                                 let key = Key { epoch, coordinates };
 
                                 if rms_map {
-                                    if let Some(tec) = record.get_mut(&key) {
-                                        tec.set_quantized_root_mean_square(value, exponent);
-                                    } else {
-                                        let mut tec = TEC::default();
-                                        tec.set_quantized_root_mean_square(value, exponent);
-                                        record.insert(key, tec);
-                                    }
+                                    // if let Some(tec) = record.get_mut(&key) {
+                                    //     tec.set_quantized_root_mean_square(value, exponent);
+                                    // } else {
+                                    //     let mut tec = TEC::default();
+                                    //     tec.set_quantized_root_mean_square(value, exponent);
+                                    //     // record.insert(key, tec);
+                                    // }
                                 } else if height_map {
                                     // TODO: Height map not supported.
                                 } else {
-                                    if let Some(tec) = record.get_mut(&key) {
-                                        *tec = tec.with_tecu(value as f64);
-                                    } else {
-                                        let tec = TEC::from_quantized(value, exponent);
-                                        record.insert(key, tec);
-                                    }
+                                    // if let Some(tec) = record.get_mut(&key) {
+                                    //     *tec = tec.with_tecu(value as f64);
+                                    // } else {
+                                    //     let tec = TEC::from_quantized(value, exponent);
+                                    //     // record.insert(key, tec);
+                                    // }
                                 }
                             },
                             Err(e) => {

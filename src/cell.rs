@@ -1,6 +1,6 @@
-use geo::{coord, Area, Contains, Coord, CoordNum, Point, Rect};
+use geo::{coord, Area, Contains, Coord, CoordNum, Geometry, Point, Rect};
 
-use crate::prelude::{Epoch, TEC};
+use crate::prelude::TEC;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MapPoint {
@@ -21,13 +21,9 @@ impl Default for MapPoint {
     }
 }
 
-/// Synchronous quantized [MapCell],
-/// of either standard or custom latitude and longitude widths.
+/// [MapCell] describing a small region.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MapCell {
-    /// Epoch
-    pub epoch: Epoch,
-
     /// North East [MapPoint]
     pub north_east: MapPoint,
 
@@ -45,7 +41,6 @@ impl Default for MapCell {
     /// Builds a default unitary [MapCell] of with unitary width and null central TEC.
     fn default() -> Self {
         Self {
-            epoch: Default::default(),
             north_east: MapPoint {
                 point: Point::new(1.0, 1.0),
                 tec: Default::default(),
@@ -69,17 +64,58 @@ impl Default for MapCell {
 impl MapCell {
     /// Define a new [MapCell] from all 4 [MapPoint]s describing each corner.
     pub fn from_corners(
-        epoch: Epoch,
         north_east: MapPoint,
         north_west: MapPoint,
         south_east: MapPoint,
         south_west: MapPoint,
     ) -> Self {
         Self {
-            epoch,
             north_east,
             north_west,
             south_east,
+            south_west,
+        }
+    }
+
+    /// Copies and updates the North East TEC component
+    pub fn with_ne_tec(mut self, tec: TEC) -> Self {
+        self.north_east.tec = tec;
+        self
+    }
+
+    /// Copies and updates the North West TEC component
+    pub fn with_nw_tec(mut self, tec: TEC) -> Self {
+        self.north_west.tec = tec;
+        self
+    }
+
+    /// Copies and updates the South East TEC component
+    pub fn with_se_tec(mut self, tec: TEC) -> Self {
+        self.south_east.tec = tec;
+        self
+    }
+
+    /// Copies and updates the South West TEC component
+    pub fn with_sw_tec(mut self, tec: TEC) -> Self {
+        self.south_west.tec = tec;
+        self
+    }
+
+    /// Define a new [MapCell] from the bounding [Rect]angle
+    /// describing the Northern Eastern most (upper left) point
+    /// and Southern Western most (lower right) point.
+    /// NB: the TEC values are null for the NW and SE point, and should be manually defined.
+    pub fn from_ne_sw_borders(north_east: MapPoint, south_west: MapPoint) -> Self {
+        Self {
+            north_west: MapPoint {
+                tec: Default::default(),
+                point: Point::new(south_west.point.x(), north_east.point.y()),
+            },
+            south_east: MapPoint {
+                tec: Default::default(),
+                point: Point::new(north_east.point.x(), south_west.point.y()),
+            },
+            north_east,
             south_west,
         }
     }
@@ -94,9 +130,9 @@ impl MapCell {
         Rect::new(self.south_west.point, self.north_east.point)
     }
 
-    /// Returns true if following [Point] is contained within this [MapCell].
-    pub fn contains(&self, point: &Point<f64>) -> bool {
-        self.borders().contains(point)
+    /// Returns true if following [Geometry] is contained within this [MapCell].
+    pub fn contains(&self, geometry: &Geometry<f64>) -> bool {
+        self.borders().contains(geometry)
     }
 
     /// Stretch this [MapCell] into a newer [MapCell], refer to [Self::stretch_mut] for more information.
@@ -137,18 +173,5 @@ impl MapCell {
             + self.north_east.tec.tecu() * x * y;
 
         TEC::from_tecu(tecu)
-    }
-
-    /// Form a new [MapCell] using both spatial and temporal interpolation.
-    /// Usually, we use synchronous [MapCell]s obtained from the IONEX.
-    /// ## Inputs
-    /// - self: must be sampled at t-1
-    /// - next: [Self] sampled at t+1
-    pub fn asynchronous_interpolate(&self, next: Self) -> Self {
-        let center = Epoch::from_duration(next.epoch - self.epoch, self.epoch.time_scale);
-
-        let dt_seconds = (next.epoch - self.epoch).to_seconds();
-
-        Self::default()
     }
 }

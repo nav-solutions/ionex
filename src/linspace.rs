@@ -1,6 +1,36 @@
 use std::ops::Rem;
 
-use crate::error::ParsingError;
+use crate::{error::ParsingError, quantized::Quantized};
+
+/// Quantized Linspace for iteration
+#[derive(Debug, Copy, Clone, Default, PartialEq, PartialOrd)]
+pub struct QuantizedLinspace {
+    ptr: Quantized,
+    pub start: Quantized,
+    pub end: Quantized,
+    pub spacing: Quantized,
+}
+
+impl Iterator for QuantizedLinspace {
+    type Item = Quantized;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.ptr.quantized > self.end.quantized {
+            return None;
+        }
+
+        let value = self.ptr;
+        self.ptr.quantized += self.spacing.quantized;
+
+        Some(value)
+    }
+}
+
+impl QuantizedLinspace {
+    pub fn real_value(&self) -> f64 {
+        self.ptr.real_value_f64()
+    }
+}
 
 /// Linear space as used in IONEX or Antenna grid definitions.
 /// Linear space starting from `start` ranging to `end` (included).
@@ -18,6 +48,16 @@ pub struct Linspace {
 }
 
 impl Linspace {
+    /// Quantized this [Linspace] returning a [QuantizedLinspace]
+    pub fn quantize(&self) -> QuantizedLinspace {
+        QuantizedLinspace {
+            ptr: Quantized::new_auto_scaled(self.start),
+            start: Quantized::new_auto_scaled(self.start),
+            end: Quantized::new_auto_scaled(self.end),
+            spacing: Quantized::new_auto_scaled(self.spacing),
+        }
+    }
+
     /// Builds a new Linear space
     pub fn new(start: f64, end: f64, spacing: f64) -> Result<Self, ParsingError> {
         if start == end && spacing == 0.0 {

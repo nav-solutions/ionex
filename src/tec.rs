@@ -1,4 +1,4 @@
-use crate::prelude::Quantized;
+use crate::quantized::Quantized;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
