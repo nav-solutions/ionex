@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TEC {
     /// TEC quantized in TEcu
-    tecu: Quantized,
+    pub(crate) tecu: Quantized,
 
     /// RMS (TEC)
     rms: Option<Quantized>,

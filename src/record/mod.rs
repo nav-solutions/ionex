@@ -5,6 +5,8 @@ use std::collections::{
     btree_map::{Iter, Keys},
     BTreeMap, HashMap,
 };
+
+use itertools::Itertools;
 use std::str::FromStr;
 use thiserror::Error;
 
@@ -46,6 +48,6 @@ impl Record {
 
     /// Obtain [Epoch]s Iterator in chronological order.
     pub fn epochs_iter(&self) -> Box<dyn Iterator<Item = Epoch> + '_> {
-        Box::new(self.map.keys().map(|k| k.epoch))
+        Box::new(self.map.keys().map(|k| k.epoch).unique())
     }
 }

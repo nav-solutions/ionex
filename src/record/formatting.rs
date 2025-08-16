@@ -1,8 +1,9 @@
 use crate::{
+    coordinates::QuantizedCoordinates,
     epoch::format_body as format_epoch,
     error::FormattingError,
     fmt_ionex,
-    prelude::{Header, Record},
+    prelude::{Header, Key, Record},
 };
 
 use std::io::{BufWriter, Write};
@@ -15,6 +16,7 @@ impl Record {
         header: &Header,
         w: &mut BufWriter<W>,
     ) -> Result<(), FormattingError> {
+        const FORMATTED_OFFSET: usize = 5;
         const NUM_LONGITUDES_PER_LINE: usize = 16;
 
         let grid = header.grid;
@@ -37,8 +39,18 @@ impl Record {
             grid.longitude.spacing,
         );
 
-        let nth_map = 0;
-        let has_h = false;
+        // NB: this will not work if
+        // - grid accuracy changes between regions or epochs
+        // - map is not 2D
+        // - does not support scaling update very smoothly
+        let altitude_km = header.grid.altitude.start;
+
+        let mut line_offset = 0;
+        let mut longitude_ptr_ddeg;
+        let mut latitude_ptr_ddeg = header.grid.latitude.start;
+
+        // lines buf
+        let mut buffer = String::with_capacity(1024);
 
         // TEC MAPs. Grid browsing:
         // - browse latitude (starting on northernmost.. to southernmost)
@@ -55,6 +67,65 @@ impl Record {
                 "{}",
                 fmt_ionex(&format_epoch(epoch), "EPOCH OF CURRENT MAP")
             )?;
+
+            while latitude_ptr_ddeg != header.grid.latitude.end {
+                println!("lat_ptr={}", latitude_ptr_ddeg);
+
+                line_offset = 0;
+                longitude_ptr_ddeg = header.grid.longitude.start;
+
+                // grid specs
+                writeln!(
+                    w,
+                    "{}",
+                    fmt_ionex(
+                        &format!(
+                            "  {:6.1}{:6.1}{:6.1}{:6.1}{:6.1}",
+                            latitude_ptr_ddeg,
+                            header.grid.longitude.start,
+                            header.grid.longitude.end,
+                            header.grid.longitude.spacing,
+                            header.grid.altitude.start,
+                        ),
+                        "LAT/LON1/LON2/DLON/H"
+                    )
+                )?;
+
+                while longitude_ptr_ddeg <= header.grid.longitude.end {
+                    println!("long_ptr={}", longitude_ptr_ddeg);
+                    // obtain coordinates
+                    let coordinates = QuantizedCoordinates::from_decimal_degrees(
+                        latitude_ptr_ddeg,
+                        longitude_ptr_ddeg,
+                        header.grid.altitude.start,
+                    );
+
+                    let key = Key { epoch, coordinates };
+
+                    // format map
+                    if let Some(tec) = self.get(&key) {
+                        write!(w, "{:5}", tec.tecu.quantized)?;
+                    } else {
+                        write!(w, " 9999")?; // standardized
+                    }
+
+                    line_offset += FORMATTED_OFFSET;
+
+                    if line_offset >= 80 {
+                        write!(w, "{}", '\n')?;
+                        line_offset = 0;
+                    }
+
+                    longitude_ptr_ddeg += header.grid.longitude.spacing;
+                }
+
+                if line_offset != 80 {
+                    // needs termination
+                    write!(w, "{}", '\n')?;
+                }
+
+                latitude_ptr_ddeg += header.grid.latitude.spacing;
+            }
 
             writeln!(
                 w,

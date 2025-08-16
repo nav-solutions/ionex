@@ -20,13 +20,19 @@ quantization spec that is constant over entire fileset and is described in the h
 ## Advantages
 
 - Fast and powerful parser
-- Open sources: read and access all the code
+- Open source
 - Seamless Gzip decompression (on `flate2` feature)
 - Convenient `geo` bridging functions
 - Full 2D support
-- Full support of Root Mean Square of each TEC estimates
-- Partial 3D support (volumic IONEX)
-- File formatting is work in progress and not validated to this day
+- TEC Root Mean Square is supported
+- File formatting is validated for 2D IONEX, including TEC RMS
+
+## Limitations
+
+- Height map not supported yet
+- This parser/formatter will not work well if coordinates grid 
+is is not the same across regions or between maps. 
+Next version should support that as well.
 
 ## Citation and referencing
 
