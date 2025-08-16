@@ -69,7 +69,7 @@ impl Record {
             )?;
 
             while latitude_ptr_ddeg != header.grid.latitude.end {
-                println!("lat_ptr={}", latitude_ptr_ddeg);
+                // println!("lat_ptr={}", latitude_ptr_ddeg);
 
                 line_offset = 0;
                 longitude_ptr_ddeg = header.grid.longitude.start;
@@ -92,7 +92,7 @@ impl Record {
                 )?;
 
                 while longitude_ptr_ddeg <= header.grid.longitude.end {
-                    println!("long_ptr={}", longitude_ptr_ddeg);
+                    // println!("long_ptr={}", longitude_ptr_ddeg);
                     // obtain coordinates
                     let coordinates = QuantizedCoordinates::from_decimal_degrees(
                         latitude_ptr_ddeg,
