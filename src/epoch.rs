@@ -4,10 +4,18 @@ use crate::prelude::{Epoch, ParsingError};
 // use std::str::FromStr;
 
 /// Formats given epoch to string, matching standard specifications
-pub(crate) fn format(epoch: Epoch) -> String {
+pub(crate) fn format_header(epoch: Epoch) -> String {
     let (y, m, d, hh, mm, ss, _nanos) = epoch.to_gregorian(epoch.time_scale);
     format!(
         "{:04}   {:>2}    {:>2}    {:>2}    {:>2}    {:>2}",
+        y, m, d, hh, mm, ss
+    )
+}
+
+pub(crate) fn format_body(epoch: Epoch) -> String {
+    let (y, m, d, hh, mm, ss, _nanos) = epoch.to_gregorian(epoch.time_scale);
+    format!(
+        "  {:04}    {:>2}    {:>2}    {:>2}    {:>2}    {:>2}",
         y, m, d, hh, mm, ss
     )
 }

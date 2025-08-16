@@ -1,5 +1,5 @@
 use crate::{
-    epoch::format as format_epoch,
+    epoch::format_header as format_epoch,
     fmt_ionex,
     prelude::{Duration, FormattingError, Header, Version},
 };

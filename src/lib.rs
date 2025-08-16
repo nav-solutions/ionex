@@ -38,10 +38,9 @@ pub mod version;
 
 mod coordinates;
 mod epoch;
-mod formatting;
 mod ionosphere;
-mod parsing;
 mod quantized;
+mod record;
 
 #[cfg(test)]
 mod tests;
@@ -64,11 +63,10 @@ use hifitime::prelude::Epoch;
 
 use crate::{
     error::{FormattingError, ParsingError},
-    formatting::format_record,
     header::Header,
     key::Key,
-    parsing::parse_record,
     production::{ProductionAttributes, Region},
+    record::Record,
     tec::TEC,
 };
 
@@ -86,10 +84,11 @@ pub mod prelude {
         mapf::MappingFunction,
         production::*,
         quantized::Quantized,
+        record::Record,
         system::ReferenceSystem,
         tec::TEC,
         version::Version,
-        Comments, Record, IONEX,
+        Comments, IONEX,
     };
 
     // pub re-export
@@ -99,9 +98,6 @@ pub mod prelude {
 
 /// IONEX comments are readable descriptions.
 pub type Comments = Vec<String>;
-
-/// [Record] describes IONEX data.
-pub type Record = BTreeMap<Key, TEC>;
 
 /// macro to format one header line or a comment
 pub(crate) fn fmt_ionex(content: &str, marker: &str) -> String {
@@ -149,11 +145,11 @@ pub struct IONEX {
     /// [Header] gives general information and describes following content.
     pub header: Header,
 
-    /// [Comments] stored as they appeared in file body
-    pub comments: Comments,
-
-    /// [Record] is the actual file content and is heavily [RinexType] dependent
+    /// IONEX [Record].
     pub record: Record,
+
+    /// [Comments] found in file record
+    pub comments: Comments,
 
     /// [ProductionAttributes] resolved for file names that follow
     /// according to the standards.
@@ -295,12 +291,12 @@ impl IONEX {
 
         // Parse record (=consumes rest of this resource)
         // Comments are preserved and store "as is"
-        let (record, comments) = parse_record(&mut header, reader)?;
+        let (record, comments) = Record::parse(&mut header, reader)?;
 
         Ok(Self {
             header,
-            comments,
             record,
+            comments,
             production: Default::default(),
         })
     }
@@ -310,7 +306,14 @@ impl IONEX {
     /// in [Header] section. This is the mirror operation of [Self::parse].
     pub fn format<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), FormattingError> {
         self.header.format(writer)?;
-        format_record(writer, &self.record, &self.header)?;
+
+        // format all comments at beginning of file
+        for comment in self.comments.iter() {
+            writeln!(writer, "{}", fmt_ionex(comment, "COMMENT"),)?;
+        }
+
+        self.record.format(&self.header, writer)?;
+
         writer.flush()?;
         Ok(())
     }

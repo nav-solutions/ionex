@@ -14,43 +14,9 @@ pub fn format_record<W: Write>(
     header: &Header,
 ) -> Result<(), FormattingError> {
     const NUM_LONGITUDES_PER_LINE: usize = 16;
-
-    // browse grid:
-    // - for each altitude (km)
-    // - - browse latitude (starting on northernmost.. to southernmost)
-    // - - - browse longitude (starting on easternmost.. to westernmost)
-    let grid = &header.grid;
-
-    let (altitude_low_km, altitude_high_km, altitude_spacing_km) = (
-        grid.altitude.start,
-        grid.altitude.end,
-        grid.altitude.spacing,
-    );
-
-    let (latitude_north_ddeg, latitude_south_ddeg, latitude_spacing_ddeg) = (
-        grid.latitude.start,
-        grid.latitude.end,
-        grid.latitude.spacing,
-    );
-
-    let (longitude_east_ddeg, longitude_west_ddeg, longitude_spacing_ddeg) = (
-        grid.longitude.start,
-        grid.longitude.end,
-        grid.longitude.spacing,
-    );
-
-    let nth_map = 0;
-    let has_h = false;
     let mut has_rms = false;
 
     for t in record.keys().map(|k| k.epoch).unique().sorted() {
-        // format all TEC maps
-        writeln!(
-            w,
-            "{}",
-            fmt_ionex(&format!("{:6}", nth_map), "START OF TEC MAP")
-        )?;
-
         let mut altitude_km = altitude_low_km;
 
         while altitude_km < altitude_high_km {
