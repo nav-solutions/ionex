@@ -97,7 +97,7 @@ pub mod prelude {
     };
 
     // pub re-export
-    pub use geo::{coord, Geometry, Point, Polygon, Rect};
+    pub use geo::{coord, GeodesicArea, Geometry, Point, Polygon, Rect};
     pub use gnss::prelude::{Constellation, SV};
     pub use hifitime::{Duration, Epoch, TimeScale, TimeSeries};
 }
@@ -160,13 +160,22 @@ pub(crate) fn fmt_comment(content: &str) -> String {
 /// // at previous altitude, above mean sea level
 /// assert!(ionex.is_2d());
 ///
-/// // this file is named acoording to IGS standards
+/// // this file is named according to IGS standards
 /// let descriptor = ionex.production.unwrap();
 ///
-/// // convert to region of interest (in decimal degrees)
-/// let europe = Rect::new(coord!(x: -23.0, y: -1.0), coord!(x: -25.0, y: -2.0));
+/// // to obtain TEC values at any coordinates, you
+/// // should use the [MapCell] local region (rectangle quanta)
+/// // that offers many functions based off the Geo crate.
 ///
-/// let regional = ionex.to_region_degrees(europe);
+/// //
+///
+/// // convert Worldwide IONEX to Regional IONEX
+/// // retaining only an ROI in decimal degrees
+/// let roi = Rect::new(coord!(x: -180.0, y: -23.0), coord!(x: -110.0, y: 5.0));
+///
+/// let regional = ionex.to_regional_ionex(roi);
+///
+/// // the grid has been shrinked
 ///
 /// // Convenient helper to follow standard conventions
 /// let filename = regional.standardized_filename();
@@ -185,6 +194,17 @@ pub(crate) fn fmt_comment(content: &str) -> String {
 ///     .unwrap_or_else(|e| {
 ///         panic!("failed to parse region of interest");
 ///     });
+///
+/// // convenient backwards operation, but only the ROI
+/// // is actually present in the Record at this point,
+/// // all other data points were lost
+/// let global = regional.to_worldwide_ionex();
+///
+/// // verify the grid is back to its worldwide initial state
+/// assert_eq!(global.header.grid.latitude.start, -87.5);
+/// assert_eq!(global.header.grid.latitude.end, 87.5);
+/// assert_eq!(global.header.grid.longitude.start, -180.0);
+/// assert_eq!(global.header.grid.longiitude.end, 180.0);
 /// ```
 pub struct IONEX {
     /// [Header] gives general information and describes following content.
@@ -522,10 +542,29 @@ impl IONEX {
         )
     }
 
+    /// Stretch this Regional [IONEX] to a Global/Worldwide [IONEX]
+    pub fn to_worldwide_ionex(&self) -> IONEX {
+        let mut ionex = self.clone();
+
+        if let Some(production) = &mut ionex.production {
+            production.region = Region::Global;
+        }
+
+        // update grid specs, preserve accuracy
+        ionex.header.grid.latitude.start = -87.5;
+        ionex.header.grid.latitude.end = 87.5;
+        ionex.header.grid.longitude.start = -180.0;
+        ionex.header.grid.longitude.end = 180.0;
+
+        // insert appriopriate values
+
+        ionex
+    }
+
     /// Converts this Global/Worldwide [IONEX] to Regional [IONEX]
     /// delimited by (possibly complex) bounding geometry, for which [BoundingRect] needs
     /// to return correctly. Each boundary coordinates must also be expressed in degrees.
-    pub fn to_region_degrees(&self, region: Polygon) -> Option<IONEX> {
+    pub fn to_regional_ionex(&self, region: Polygon) -> Option<IONEX> {
         let mut ionex = IONEX::default();
 
         let bounding_rect = region.bounding_rect()?;

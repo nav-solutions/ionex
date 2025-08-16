@@ -1,4 +1,4 @@
-use geo::{coord, Area, Contains, Coord, CoordNum, Geometry, Point, Rect};
+use geo::{coord, Area, Contains, Coord, CoordNum, GeodesicArea, Geometry, Point, Rect};
 
 use crate::prelude::{Epoch, TEC};
 
@@ -68,9 +68,19 @@ impl MapCell {
         }
     }
 
-    /// Returns area of this [MapCell]
-    pub fn area(&self) -> f64 {
-        self.borders().unsigned_area()
+    /// Returns central [Point] of this [MapCell]
+    pub fn center(&self) -> Point<f64> {
+        geo::Point(self.borders().center())
+    }
+
+    /// Returns geodesic perimeter of this [MapCell]
+    pub fn geodesic_perimeter(&self) -> f64 {
+        self.borders().geodesic_perimeter()
+    }
+
+    /// Returns geodesic area
+    pub fn geodesic_area(&self) -> f64 {
+        self.borders().geodesic_area_unsigned()
     }
 
     /// Returns borders of this [MapCell] expressed as a [Rect]angle
@@ -107,14 +117,14 @@ impl MapCell {
         self
     }
 
-    /// Returns latitude width of this [MapCell] in degrees
-    pub fn latitude_span_degrees(&self) -> f64 {
+    /// Returns latitude span of this [MapCell] in degrees
+    pub fn latitude_degrees_span(&self) -> f64 {
         let borders = self.borders();
         borders.max().y - borders.min().y
     }
 
-    /// Returns longitude width of this [MapCell] in degrees
-    pub fn longitude_span_degrees(&self) -> f64 {
+    /// Returns longitude span of this [MapCell] in degrees
+    pub fn longitude_degrees_span(&self) -> f64 {
         let borders = self.borders();
         borders.max().x - borders.min().x
     }
@@ -135,5 +145,54 @@ impl MapCell {
             + self.north_east.tec.tecu() * x * y;
 
         TEC::from_tecu(tecu)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use crate::prelude::{coord, Epoch, GeodesicArea, Geometry, Point, TEC};
+
+    #[test]
+    fn map_cell_interp() {
+        let epoch = Epoch::default();
+
+        let north_east = MapPoint {
+            point: Point::new(-180.0, -87.5),
+            tec: TEC::from_tecu(92.0),
+        };
+
+        let north_west = MapPoint {
+            point: Point::new(-175.5, -87.5),
+            tec: TEC::from_tecu(92.0),
+        };
+
+        let south_east = MapPoint {
+            point: Point::new(-175.5, -85.0),
+            tec: TEC::from_tecu(92.0),
+        };
+
+        let south_west = MapPoint {
+            point: Point::new(-175.5, -85.0),
+            tec: TEC::from_tecu(92.0),
+        };
+
+        let cell = MapCell::from_corners(epoch, north_east, north_west, south_east, south_west);
+
+        assert_eq!(cell.latitude_degrees_span(), 2.5);
+        assert_eq!(cell.longitude_degrees_span(), 4.5);
+
+        assert!((cell.geodesic_perimeter() - 624157.0).abs() < 1.0);
+        assert!((cell.geodesic_area() - 9168639883.0).abs() < 1.0);
+
+        let inside = Point::new(-179.0, -87.0);
+        let outside = Point::new(-174.0, -87.5);
+
+        assert!(cell.contains(&Geometry::Point(inside)));
+        assert!(!cell.contains(&Geometry::Point(outside)));
+
+        let interpolated = cell.interpolate(inside);
+        assert_eq!(interpolated.tecu(), 9.2);
     }
 }
