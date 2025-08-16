@@ -1,5 +1,5 @@
 use crate::{
-    prelude::{Duration, MappingFunction, ReferenceSystem, Version, IONEX},
+    prelude::{coord, Duration, MappingFunction, Rect, ReferenceSystem, Version, IONEX},
     tests::{
         init_logger,
         toolkit::{generic_test, TestPoint},
@@ -229,6 +229,11 @@ fn parse_ckmg0020() {
 
     assert_eq!(ionex.header.elevation_cutoff, 0.0);
     assert_eq!(ionex.header.exponent, -1);
+
+    assert_eq!(
+        ionex.map_borders_degrees(),
+        Rect::new(coord!(x: -180.0, y: -87.5), coord!(x: 180.0, y: 87.5))
+    );
 
     assert_eq!(ionex.header.comments.len(), 2);
 

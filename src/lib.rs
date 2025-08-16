@@ -97,7 +97,7 @@ pub mod prelude {
     };
 
     // pub re-export
-    pub use geo::Point;
+    pub use geo::{coord, Geometry, Point, Polygon, Rect};
     pub use gnss::prelude::{Constellation, SV};
     pub use hifitime::{Duration, Epoch, TimeScale, TimeSeries};
 }
