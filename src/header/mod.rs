@@ -1,3 +1,4 @@
+mod formatting;
 mod parsing;
 
 #[cfg(feature = "serde")]
@@ -119,85 +120,6 @@ impl Default for Header {
 }
 
 impl Header {
-    /// Formats [Header] into [BufWriter].
-    pub(crate) fn format<W: Write>(&self, w: &mut BufWriter<W>) -> Result<(), FormattingError> {
-        writeln!(
-            w,
-            "{}",
-            fmt_ionex(&format!("{:6}", self.map_dimension), "MAP DIMENSION")
-        )?;
-
-        // altitude grid
-        let (start, end, spacing) = (
-            self.grid.altitude.start,
-            self.grid.altitude.end,
-            self.grid.altitude.spacing,
-        );
-
-        writeln!(
-            w,
-            "{}",
-            fmt_ionex(
-                &format!("{} {} {}", start, end, spacing),
-                "HGT1 / HGT2 / DHGT"
-            )
-        )?;
-
-        // latitude grid
-        let (start, end, spacing) = (
-            self.grid.latitude.start,
-            self.grid.latitude.end,
-            self.grid.latitude.spacing,
-        );
-
-        writeln!(
-            w,
-            "{}",
-            fmt_ionex(
-                &format!("{} {} {}", start, end, spacing),
-                "LAT1 / LAT2 / DLAT"
-            )
-        )?;
-
-        // longitude grid
-        let (start, end, spacing) = (
-            self.grid.longitude.start,
-            self.grid.longitude.end,
-            self.grid.longitude.spacing,
-        );
-
-        writeln!(
-            w,
-            "{}",
-            fmt_ionex(
-                &format!("{} {} {}", start, end, spacing),
-                "LON1 / LON2 / DLON"
-            )
-        )?;
-
-        // elevation cutoff
-        writeln!(
-            w,
-            "{}",
-            fmt_ionex(&format!("{}", self.elevation_cutoff), "ELEVATION CUTOFF")
-        )?;
-
-        // mapping function
-        writeln!(
-            w,
-            "{}",
-            fmt_ionex(&format!("{}", self.mapf), "MAPPING FUNCTION")
-        )?;
-
-        // time of first map
-        writeln!(w, "{}", fmt_ionex("TODO", "EPOCH OF FIRST MAP"))?;
-
-        // time of last map
-        writeln!(w, "{}", fmt_ionex("TODO", "EPOCH OF LAST MAP"))?;
-
-        Ok(())
-    }
-
     /// Copies [Self], returning with an updated number of Maps (total).
     pub fn with_number_of_maps(&self, number: u32) -> Self {
         let mut s = self.clone();

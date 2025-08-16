@@ -3,14 +3,14 @@ use crate::prelude::{Epoch, ParsingError};
 
 // use std::str::FromStr;
 
-// /// Formats given epoch to string, matching standard specifications
-// pub(crate) fn format(epoch: Epoch) -> String {
-//     let (y, m, d, hh, mm, ss, _nanos) = epoch_decompose(epoch);
-//     format!(
-//         "{:04}   {:>2}    {:>2}    {:>2}    {:>2}    {:>2}",
-//         y, m, d, hh, mm, ss
-//     )
-// }
+/// Formats given epoch to string, matching standard specifications
+pub(crate) fn format(epoch: Epoch) -> String {
+    let (y, m, d, hh, mm, ss, _nanos) = epoch.to_gregorian(epoch.time_scale);
+    format!(
+        "{:04}   {:>2}    {:>2}    {:>2}    {:>2}    {:>2}",
+        y, m, d, hh, mm, ss
+    )
+}
 
 pub(crate) fn parse_utc(s: &str) -> Result<Epoch, ParsingError> {
     let (mut y, mut m, mut d, mut hh, mut mm, mut ss) = (0_i32, 0_u8, 0_u8, 0_u8, 0_u8, 0_u8);
