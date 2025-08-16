@@ -127,7 +127,10 @@ impl Header {
         writeln!(
             w,
             "{}",
-            fmt_ionex(&format!("{:8}", self.elevation_cutoff), "ELEVATION CUTOFF")
+            fmt_ionex(
+                &format!("{:6.1}", self.elevation_cutoff),
+                "ELEVATION CUTOFF"
+            )
         )?;
 
         // mapping function

@@ -23,13 +23,13 @@ impl TEC {
         Self {
             rms: None,
             height: None,
-            tecu: Quantized::new_auto_scaled(tecu),
+            tecu: Quantized::auto_scaled(tecu),
         }
     }
 
     /// Updates this [TEC] with new TECu value
     pub fn with_tecu(mut self, tecu: f64) -> Self {
-        self.tecu = Quantized::new_auto_scaled(tecu);
+        self.tecu = Quantized::auto_scaled(tecu);
         self
     }
 
@@ -39,20 +39,20 @@ impl TEC {
         Self {
             rms: None,
             height: None,
-            tecu: Quantized::new_auto_scaled(tecu),
+            tecu: Quantized::auto_scaled(tecu),
         }
     }
 
     /// Updates this [TEC] with new TEC value in m^-2
     pub fn with_tec_m2(mut self, tec: f64) -> Self {
         let tecu = tec / 10.0E16;
-        self.tecu = Quantized::new_auto_scaled(tecu);
+        self.tecu = Quantized::auto_scaled(tecu);
         self
     }
 
     /// Copyes and returns [Self] with update TEC RMS.
     pub fn with_rms(mut self, rms: f64) -> Self {
-        self.rms = Some(Quantized::new_auto_scaled(rms));
+        self.rms = Some(Quantized::auto_scaled(rms));
         self
     }
 
@@ -63,7 +63,7 @@ impl TEC {
             rms: None,
             height: None,
             tecu: Quantized {
-                quantized: tecu,
+                value: tecu,
                 exponent: -exponent,
             },
         }
@@ -73,13 +73,13 @@ impl TEC {
     pub(crate) fn set_quantized_root_mean_square(&mut self, rms: i64, exponent: i8) {
         self.rms = Some(Quantized {
             exponent: -exponent,
-            quantized: rms,
+            value: rms,
         });
     }
 
     /// Returns Total Electron Content estimate, in TECu (=10^-16 m-2)
     pub fn tecu(&self) -> f64 {
-        self.tecu.real_value_f64()
+        self.tecu.real_value()
     }
 
     /// Returns Total Electron Content estimate, in m-2
@@ -90,7 +90,7 @@ impl TEC {
     /// Returns TEC Root Mean Square (if determined).
     pub fn root_mean_square(&self) -> Option<f64> {
         let rms = self.rms?;
-        Some(rms.real_value_f64())
+        Some(rms.real_value())
     }
 }
 

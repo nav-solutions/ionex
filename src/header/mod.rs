@@ -8,7 +8,8 @@ use crate::{
     fmt_ionex,
     linspace::Linspace,
     prelude::{
-        Comments, Duration, Epoch, FormattingError, Grid, MappingFunction, ReferenceSystem, Version,
+        Comments, Duration, Epoch, FormattingError, Grid, MappingFunction, ReferenceSystem,
+        TimeSeries, Version,
     },
 };
 
@@ -120,6 +121,17 @@ impl Default for Header {
 }
 
 impl Header {
+    /// Creates a [TimeSeries] starting from [Self::epoch_of_first_map]
+    /// until [Self::epoch_of_last_map] (both included) spaced by the
+    /// sampling period.
+    pub fn timeseries(&self) -> TimeSeries {
+        TimeSeries::inclusive(
+            self.epoch_of_first_map,
+            self.epoch_of_last_map,
+            self.sampling_period,
+        )
+    }
+
     /// Copies [Self], returning with an updated number of Maps (total).
     pub fn with_number_of_maps(&self, number: u32) -> Self {
         let mut s = self.clone();

@@ -104,7 +104,7 @@ impl Record {
 
                     // format map
                     if let Some(tec) = self.get(&key) {
-                        write!(w, "{:5}", tec.tecu.quantized)?;
+                        write!(w, "{:5}", tec.tecu.value)?;
                     } else {
                         write!(w, " 9999")?; // standardized
                     }

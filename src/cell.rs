@@ -1,8 +1,8 @@
 use geo::{coord, Area, Contains, Coord, CoordNum, Geometry, Point, Rect};
 
-use crate::prelude::TEC;
+use crate::prelude::{Epoch, TEC};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct MapPoint {
     /// [Point]
     pub point: Point<f64>,
@@ -11,19 +11,12 @@ pub struct MapPoint {
     pub tec: TEC,
 }
 
-impl Default for MapPoint {
-    /// Builds a default [MapCell] of null width with null central value.
-    fn default() -> Self {
-        Self {
-            point: Default::default(),
-            tec: Default::default(),
-        }
-    }
-}
-
-/// [MapCell] describing a small region.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// [MapCell] describing a region that we can then interpolate.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct MapCell {
+    /// Epoch of observation
+    pub epoch: Epoch,
+
     /// North East [MapPoint]
     pub north_east: MapPoint,
 
@@ -37,39 +30,17 @@ pub struct MapCell {
     pub south_west: MapPoint,
 }
 
-impl Default for MapCell {
-    /// Builds a default unitary [MapCell] of with unitary width and null central TEC.
-    fn default() -> Self {
-        Self {
-            north_east: MapPoint {
-                point: Point::new(1.0, 1.0),
-                tec: Default::default(),
-            },
-            north_west: MapPoint {
-                point: Point::new(0.0, 1.0),
-                tec: Default::default(),
-            },
-            south_east: MapPoint {
-                point: Point::new(1.0, 0.0),
-                tec: Default::default(),
-            },
-            south_west: MapPoint {
-                point: Point::new(0.0, 0.0),
-                tec: Default::default(),
-            },
-        }
-    }
-}
-
 impl MapCell {
-    /// Define a new [MapCell] from all 4 [MapPoint]s describing each corner.
+    /// Define a new [MapCell] from all 4 [MapPoint]s describing each corner at this [Epoch].
     pub fn from_corners(
+        epoch: Epoch,
         north_east: MapPoint,
         north_west: MapPoint,
         south_east: MapPoint,
         south_west: MapPoint,
     ) -> Self {
         Self {
+            epoch,
             north_east,
             north_west,
             south_east,
@@ -77,36 +48,13 @@ impl MapCell {
         }
     }
 
-    /// Copies and updates the North East TEC component
-    pub fn with_ne_tec(mut self, tec: TEC) -> Self {
-        self.north_east.tec = tec;
-        self
-    }
-
-    /// Copies and updates the North West TEC component
-    pub fn with_nw_tec(mut self, tec: TEC) -> Self {
-        self.north_west.tec = tec;
-        self
-    }
-
-    /// Copies and updates the South East TEC component
-    pub fn with_se_tec(mut self, tec: TEC) -> Self {
-        self.south_east.tec = tec;
-        self
-    }
-
-    /// Copies and updates the South West TEC component
-    pub fn with_sw_tec(mut self, tec: TEC) -> Self {
-        self.south_west.tec = tec;
-        self
-    }
-
     /// Define a new [MapCell] from the bounding [Rect]angle
-    /// describing the Northern Eastern most (upper left) point
-    /// and Southern Western most (lower right) point.
+    /// describing the Northeastern most (upper left) point
+    /// and Southwestern most (lower right) point observed at this [Epoch].
     /// NB: the TEC values are null for the NW and SE point, and should be manually defined.
-    pub fn from_ne_sw_borders(north_east: MapPoint, south_west: MapPoint) -> Self {
+    pub fn from_ne_sw_borders(epoch: Epoch, north_east: MapPoint, south_west: MapPoint) -> Self {
         Self {
+            epoch,
             north_west: MapPoint {
                 tec: Default::default(),
                 point: Point::new(south_west.point.x(), north_east.point.y()),
@@ -135,24 +83,38 @@ impl MapCell {
         self.borders().contains(geometry)
     }
 
-    /// Stretch this [MapCell] into a newer [MapCell], refer to [Self::stretch_mut] for more information.
-    pub fn stretch(&self, factor: f64) -> Self {
-        let mut s = self.clone();
-        s.stretch_mut(factor);
-        s
+    /// Copies and updates the Northeast TEC component
+    pub fn with_northeast_tec(mut self, tec: TEC) -> Self {
+        self.north_east.tec = tec;
+        self
     }
 
-    /// Stretch this [MapCell] into a newer [MapCell].
-    pub fn stretch_mut(&mut self, factor: f64) {}
+    /// Copies and updates the Northwest TEC component
+    pub fn with_northwest_tec(mut self, tec: TEC) -> Self {
+        self.north_west.tec = tec;
+        self
+    }
+
+    /// Copies and updates the Southeast TEC component
+    pub fn with_southeast_tec(mut self, tec: TEC) -> Self {
+        self.south_east.tec = tec;
+        self
+    }
+
+    /// Copies and updates the Southwest TEC component
+    pub fn with_southwest_tec(mut self, tec: TEC) -> Self {
+        self.south_west.tec = tec;
+        self
+    }
 
     /// Returns latitude width of this [MapCell] in degrees
-    pub fn latitude_width_degrees(&self) -> f64 {
+    pub fn latitude_span_degrees(&self) -> f64 {
         let borders = self.borders();
         borders.max().y - borders.min().y
     }
 
     /// Returns longitude width of this [MapCell] in degrees
-    pub fn longitude_width_degrees(&self) -> f64 {
+    pub fn longitude_span_degrees(&self) -> f64 {
         let borders = self.borders();
         borders.max().x - borders.min().x
     }

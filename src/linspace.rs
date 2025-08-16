@@ -15,20 +15,14 @@ impl Iterator for QuantizedLinspace {
     type Item = Quantized;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.ptr.quantized > self.end.quantized {
+        if self.ptr.value > self.end.value {
             return None;
         }
 
         let value = self.ptr;
-        self.ptr.quantized += self.spacing.quantized;
+        self.ptr.value += self.spacing.value;
 
         Some(value)
-    }
-}
-
-impl QuantizedLinspace {
-    pub fn real_value(&self) -> f64 {
-        self.ptr.real_value_f64()
     }
 }
 
@@ -51,10 +45,10 @@ impl Linspace {
     /// Quantized this [Linspace] returning a [QuantizedLinspace]
     pub fn quantize(&self) -> QuantizedLinspace {
         QuantizedLinspace {
-            ptr: Quantized::new_auto_scaled(self.start),
-            start: Quantized::new_auto_scaled(self.start),
-            end: Quantized::new_auto_scaled(self.end),
-            spacing: Quantized::new_auto_scaled(self.spacing),
+            ptr: Quantized::auto_scaled(self.start),
+            start: Quantized::auto_scaled(self.start),
+            end: Quantized::auto_scaled(self.end),
+            spacing: Quantized::auto_scaled(self.spacing),
         }
     }
 

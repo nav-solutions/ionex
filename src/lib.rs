@@ -62,14 +62,16 @@ use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 
 use std::collections::BTreeMap;
 
-use hifitime::prelude::Epoch;
+use hifitime::prelude::{Duration, Epoch};
 
 use crate::{
     cell::{MapCell, MapPoint},
+    coordinates::QuantizedCoordinates,
     error::{FormattingError, ParsingError},
     header::Header,
     key::Key,
     production::{ProductionAttributes, Region},
+    quantized::Quantized,
     record::Record,
     tec::TEC,
 };
@@ -591,15 +593,114 @@ impl IONEX {
         s
     }
 
+    /// Designs a [MapCell] iterator, to iterate on individual
+    /// local regions which can be interpolated.
+    pub fn map_cell_iter(&self) -> Box<dyn Iterator<Item = MapCell> + '_> {
+        let timeseries = self.header.timeseries();
+
+        let lat_pairs = self.header.grid.latitude.quantize().tuple_windows();
+
+        let long_pairs = self.header.grid.longitude.quantize().tuple_windows();
+
+        let fixed_altitude_km = self.header.grid.altitude.start;
+        let fixed_altitude_q = Quantized::auto_scaled(fixed_altitude_km);
+
+        Box::new(
+            timeseries
+                .cartesian_product(lat_pairs.cartesian_product(long_pairs))
+                .filter_map(move |(epoch, ((lat1, lat2), (long1, long2)))| {
+                    let (lat1_ddeg, lat2_ddeg) = (lat1.real_value(), lat2.real_value());
+                    let (long1_ddeg, long2_ddeg) = (long1.real_value(), long2.real_value());
+
+                    let northeast = Key {
+                        epoch,
+                        coordinates: QuantizedCoordinates::from_quantized(
+                            lat1,
+                            long1,
+                            fixed_altitude_q,
+                        ),
+                    };
+
+                    let northeast = self.record.get(&northeast)?;
+
+                    let northwest = Key {
+                        epoch,
+                        coordinates: QuantizedCoordinates::from_quantized(
+                            lat1,
+                            long2,
+                            fixed_altitude_q,
+                        ),
+                    };
+
+                    let northwest = self.record.get(&northwest)?;
+
+                    let southeast = Key {
+                        epoch,
+                        coordinates: QuantizedCoordinates::from_quantized(
+                            lat2,
+                            long2,
+                            fixed_altitude_q,
+                        ),
+                    };
+
+                    let southeast = self.record.get(&southeast)?;
+
+                    let southwest = Key {
+                        epoch,
+                        coordinates: QuantizedCoordinates::from_quantized(
+                            lat2,
+                            long2,
+                            fixed_altitude_q,
+                        ),
+                    };
+
+                    let southwest = self.record.get(&southwest)?;
+
+                    Some(MapCell {
+                        epoch,
+                        north_east: MapPoint::default(),
+                        north_west: MapPoint::default(),
+                        south_east: MapPoint::default(),
+                        south_west: MapPoint::default(),
+                    })
+                }),
+        )
+    }
+
+    /// Obtain a synchronous [MapCell] iterator at specific point in time.
+    pub fn synchronous_map_cell_iter(
+        &self,
+        epoch: Epoch,
+    ) -> Box<dyn Iterator<Item = MapCell> + '_> {
+        Box::new(
+            self.map_cell_iter()
+                .filter_map(move |v| if v.epoch == epoch { Some(v) } else { None }),
+        )
+    }
+
     /// Stretch this [IONEX] into space and time, increasing
     /// both spatial and temporal precision, by applying the 2D
     /// planar and temporal interpolation.
-    pub fn temporal_planar_stretch(&self, stretch_factor: f64) -> IONEX {
+    ///
+    /// ## Inputs
+    /// - sampling_period: new sampling period as [Duration].
+    /// If the original file uses a 1hr sampling period and you say 30mins here,
+    /// the sampling rate is increased by 2.
+    /// - spatial_factor: spatial stretch factor. If you say 1.5 here, this will
+    /// give a x2 positive streching. If you say 0.5, it will be a negative stretching.
+    /// ## Returns
+    /// - new [IONEX]
+    pub fn temporal_planar_stretch(&self, sampling_period: Duration, spatial_factor: f64) -> IONEX {
         Default::default()
     }
 
     /// Stretch this mutable map, increasing grid granularity
     /// by applying the 2D planar interpolation equation.
+    ///
+    /// ## Inputs
+    /// the sampling rate is increased by 2.
+    /// - spatial_factor: spatial stretch factor. If you say 1.5 here, this will
+    /// give a x2 positive streching. If you say 0.5, it will be a negative stretching.
     pub fn planar_stretch_mut(&mut self, stretch_factor: f64) {
         // update grid
         self.header.grid.latitude.start *= stretch_factor;
@@ -611,23 +712,23 @@ impl IONEX {
         for epoch in self.record.epochs_iter() {}
     }
 
-    // /// Obtain the [MapCell] that contains following [Geometry] completely.
-    // /// ## Input
-    // /// - point: coordinates as [Point]
-    // /// ## Returns
-    // /// - None if map grid does not cointain these coordinates
-    // /// - MapCell that wraps these coordinates
-    // pub fn wrapping_map_cell(&self, geometry: &Geometry<f64>) -> Option<MapCell> {
-    //     let first_epoch = self.first_epoch()?;
+    /// Returns the [MapCell] that contains following [Geometry] completely.
+    ///
+    /// ## Input
+    /// - epoch: [Epoch] that must exist in this [IONEX]
+    /// - geometry: possibly complex [Geometry] to completely contain.
+    /// ## Returns
+    /// - None if map grid does not cointain these coordinates
+    /// - MapCell that wraps these coordinates
+    pub fn wrapping_map_cell(&self, epoch: Epoch, geometry: &Geometry<f64>) -> Option<MapCell> {
+        for cell in self.synchronous_map_cell_iter(epoch) {
+            if cell.contains(&geometry) {
+                return Some(cell);
+            }
+        }
 
-    //     for cell in self.synchronous_iter(first_epoch) {
-    //         if cell.contains(&geometry) {
-    //             return Some(cell);
-    //         }
-    //     }
-
-    //     None
-    // }
+        None
+    }
 }
 
 #[cfg(test)]
