@@ -187,14 +187,14 @@ fn parse_ckmg0020() {
     );
 
     // dump as file
-    let mut fd = File::create("test.txt").unwrap();
+    let mut fd = File::create("ckmg-v1.txt").unwrap();
     let mut writer = BufWriter::new(fd);
     ionex.format(&mut writer).unwrap_or_else(|e| {
         panic!("failed to format CKMG V1: {}", e);
     });
 
     // parse back
-    let parsed = IONEX::from_file("test.txt").unwrap_or_else(|e| {
+    let parsed = IONEX::from_file("ckmg-v1.txt").unwrap_or_else(|e| {
         panic!("failed to parse back CKMG V1: {}", e);
     });
 }
@@ -234,9 +234,9 @@ fn parse_jplg() {
 
     assert_eq!(ionex.header.version, Version::new(1, 0));
 
-    assert_eq!(ionex.header.program.unwrap(), "GIM V3.0");
-    assert_eq!(ionex.header.run_by.unwrap(), "JPL - GNISD");
-    assert_eq!(ionex.header.date.unwrap(), "04-jan-2017 02:12");
+    assert_eq!(ionex.header.program, Some("GIM V3.0".to_string()));
+    assert_eq!(ionex.header.run_by, Some("JPL - GNISD".to_string()));
+    assert_eq!(ionex.header.date, Some("04-jan-2017 02:12".to_string()));
 
     assert!(ionex.header.doi.is_none());
     assert!(ionex.header.license.is_none());
@@ -287,4 +287,16 @@ fn parse_jplg() {
         ionex.header.comments[1],
         "TEC/RMS values in 0.1 TECU; 9999, if no value available"
     );
+
+    // dump as file
+    let mut fd = File::create("jplg-v1.txt").unwrap();
+    let mut writer = BufWriter::new(fd);
+    ionex.format(&mut writer).unwrap_or_else(|e| {
+        panic!("failed to format JPLG V1: {}", e);
+    });
+
+    // parse back
+    let parsed = IONEX::from_file("jplg-v1.txt").unwrap_or_else(|e| {
+        panic!("failed to parse back JPLG V1: {}", e);
+    });
 }

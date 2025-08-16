@@ -124,14 +124,16 @@ pub(crate) fn fmt_comment(content: &str) -> String {
     fmt_ionex(content, "COMMENT")
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Default, Debug)]
 /// [IONEX] is composed of a [Header] section and a [Record] section.
 /// It is the discrete estimation of the Total Electron Content (TEC)
 /// over a plane layer or volume of the ionosphere.
 ///
 /// ```
+/// use geo::{Rect, coord};
 /// use ionex::prelude::*;
 ///
+/// // Parse Global/worldwide map
 /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
 ///     .unwrap();
 ///
@@ -140,6 +142,43 @@ pub(crate) fn fmt_comment(content: &str) -> String {
 /// assert_eq!(ionex.header.version.major, 2);
 /// assert_eq!(ionex.header.version.minor, 11);
 ///
+/// // mean altitude above mean-sea-level of the ionosphere
+/// assert_eq!(ionex.header.grid.altitude.start, 350.0);
+/// assert_eq!(ionex.header.grid.altitude.end, 350.0);
+///
+/// // radius of the mean-sea-level
+/// assert_eq!(ionex.header.base_radius_km, 6371.0);
+///
+/// // most file are 2D maps
+/// // meaning they "only" give the evolution of an isosurface
+/// // at previous altitude, above mean sea level
+/// assert!(ionex.is_2d());
+///
+/// // this file is named acoording to IGS standards
+/// let descriptor = ionex.production.unwrap();
+///
+/// // convert to region of interest (in decimal degrees)
+/// let europe = Rect::new(coord!(x: -23.0, y: -1.0), coord!(x: -25.0, y: -2.0));
+///
+/// let regional = ionex.to_region_degrees(europe);
+///
+/// // Convenient helper to follow standard conventions
+/// let filename = regional.standardized_filename();
+///
+/// // Convenient dump function
+/// let fd = File::create("region.txt").unwrap();
+/// let mut writer = BufWriter::new(fd);
+///
+/// regional.format(&writer)
+///     .unwrap_or_else(|e| {
+///         panic!("failed to format region of interest");
+///     });
+///
+/// // parse back
+/// let _ = IONEX::from_file("region.txt")
+///     .unwrap_or_else(|e| {
+///         panic!("failed to parse region of interest");
+///     });
 /// ```
 pub struct IONEX {
     /// [Header] gives general information and describes following content.
@@ -205,11 +244,6 @@ impl IONEX {
     /// Returns true if this [IONEX] is 3D
     pub fn is_3d(&self) -> bool {
         !self.is_2d()
-    }
-
-    /// Returns the map borders as [Rect]angle
-    pub fn map_borders(&self) -> Rect {
-        Rect::new(coord!( x: 0.0, y: 0.0 ), coord!( x: 0.0, y: 0.0))
     }
 
     /// Returns total altitude range covered, in kilometers.
@@ -487,6 +521,88 @@ impl IONEX {
     /// Returns [Epoch] of first map in chronological order
     pub fn first_epoch(&self) -> Option<Epoch> {
         self.epoch_iter().nth(0)
+    }
+
+    /// Describe the planary map borders as [Retc]angle. This uses
+    /// the [Header] description and assumes the following map respects
+    /// that description.
+    pub fn map_borders_degrees(&self) -> Rect {
+        Rect::new(
+            coord!( x: self.header.grid.longitude.start, y: self.header.grid.latitude.start ),
+            coord!( x: self.header.grid.longitude.end, y: self.header.grid.latitude.end),
+        )
+    }
+    /// Converts this Global/Worldwide [IONEX] to Regional [IONEX]
+    /// restraning map to the provided borders, expressed in degrees.
+    /// Borders expressed as [Rect]angle (min, max),
+    /// where x is the longitude and y the latitude angle, both
+    /// expressed in decimal degrees.
+    pub fn to_region_degrees(&self, region: Rect) -> IONEX {
+        let mut ionex = IONEX::default();
+
+        let (min_long, min_lat) = (region.min().x, region.min().y);
+        let (max_long, max_lat) = (region.max().x, region.max().y);
+
+        // copy attributes
+        ionex.production = self.production.clone();
+
+        if let Some(production) = &mut ionex.production {
+            production.region = Region::Regional;
+        }
+
+        // copy & rework header
+        ionex.header = self.header.clone();
+
+        if min_lat > ionex.header.grid.latitude.start {
+            ionex.header.grid.latitude.start = min_lat;
+        }
+
+        if max_lat < ionex.header.grid.latitude.end {
+            ionex.header.grid.latitude.end = max_lat;
+        }
+
+        if min_long > ionex.header.grid.longitude.start {
+            ionex.header.grid.longitude.start = min_long;
+        }
+
+        if max_long < ionex.header.grid.longitude.end {
+            ionex.header.grid.longitude.end = max_long;
+        }
+
+        // restrain map
+        ionex.record.map = self
+            .record
+            .map
+            .iter()
+            .filter_map(|(k, v)| {
+                let latitude_ddeg = k.latitude_ddeg();
+                let longitude_ddeg = k.longitude_ddeg();
+
+                if latitude_ddeg >= min_lat && latitude_ddeg <= max_lat {
+                    if longitude_ddeg >= min_long && longitude_ddeg <= max_long {
+                        Some((*k, *v))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        ionex
+    }
+
+    /// Converts this Global/Worldwide [IONEX] to Regional [IONEX]
+    /// restraining map to the provided borders, expressed in radians.
+    /// Borders expressed as [Rect]angle (min, max),
+    /// where x is the longitude and y the latitude angle, both
+    /// expressed in radians.
+    pub fn to_region_radians(&self, region: Rect) -> IONEX {
+        self.to_region_degrees(Rect::new(
+            coord!(x: region.min().x.to_radians(), y: region.min().y.to_radians()),
+            coord!(x: region.max().x.to_radians(), y: region.max().y.to_radians()),
+        ))
     }
 }
 

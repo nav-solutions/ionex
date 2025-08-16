@@ -22,10 +22,10 @@ quantization spec that is constant over entire fileset and is described in the h
 - Fast and powerful parser
 - Open source
 - Seamless Gzip decompression (on `flate2` feature)
-- Convenient `geo` bridging functions
 - Full 2D support
 - TEC Root Mean Square is supported
-- File formatting is validated for 2D IONEX, including TEC RMS
+- File formatting is validated for 2D IONEX, including TEC RMS.
+- File reciprocal garanteed for 2D files including RMS values (strict equality, both ways)
 
 ## Limitations
 
@@ -58,7 +58,6 @@ let ionex = IONEX::from_gzip_file("../data/IONEX/V1/CKMG0020.22I.gz")
 
 // Most IONEX files provide 2D maps
 assert!(ionex.is_2d());
-
 
 // File header gives meaningful information
 

@@ -2,7 +2,7 @@ mod formatting;
 mod parsing;
 
 use std::collections::{
-    btree_map::{Iter, Keys},
+    btree_map::{Iter, IterMut, Keys},
     BTreeMap, HashMap,
 };
 
@@ -16,7 +16,7 @@ use crate::prelude::{Comments, Epoch, Header, Key, Quantized, TEC};
 /// coordinates and time
 #[derive(Clone, Debug, Default)]
 pub struct Record {
-    map: BTreeMap<Key, TEC>,
+    pub(crate) map: BTreeMap<Key, TEC>,
 }
 
 impl Record {
@@ -25,8 +25,14 @@ impl Record {
         self.map.insert(key, tec);
     }
 
+    /// Obtain [Record] iterator.
     pub fn iter(&self) -> Iter<'_, Key, TEC> {
         self.map.iter()
+    }
+
+    /// Obtain mutable [Record] iterator.
+    pub fn iter_mut(&mut self) -> IterMut<'_, Key, TEC> {
+        self.map.iter_mut()
     }
 
     /// Obtain [TEC] value from IONEX [Record], at specified
