@@ -511,9 +511,8 @@ impl IONEX {
         false
     }
 
-    /// Describe the planary map borders as [Retc]angle. This uses
-    /// the [Header] description and assumes the following map respects
-    /// that description.
+    /// Returns map borders as [Retc]angle. This uses
+    /// the [Header] description and assumes all maps are within these borders.
     pub fn map_borders_degrees(&self) -> Rect {
         Rect::new(
             coord!( x: self.header.grid.longitude.start, y: self.header.grid.latitude.start ),
@@ -559,22 +558,30 @@ impl IONEX {
 
         let region = Geometry::Polygon(region);
 
-        // restrain map
-        ionex.record.map = self
-            .record
-            .map
-            .iter()
-            .filter_map(|(k, cell)| {
-                if cell.contains(&region) {
-                    Some((*k, *cell))
-                } else {
-                    None
-                }
-            })
-            .collect();
+        // // restrain map
+        // ionex.record.map = self
+        //     .record
+        //     .map
+        //     .iter()
+        //     .filter_map(|(k, cell)| {
+        //         if cell.contains(&region) {
+        //             Some((*k, *cell))
+        //         } else {
+        //             None
+        //         }
+        //     })
+        //     .collect();
 
         Some(ionex)
     }
+
+    // /// Obtain [MapCell] Iterator (starting on northern eastern most to southern western most cell), at this point in time.
+    // pub fn synchronous_iter(&self, epoch: Epoch) -> Box<dyn Iterator<Item = MapCell> + '_> {
+    //     Box::new(
+    //         self.iter()
+    //             .filter_map(move |(k, v)| if *k == epoch { Some(*v) } else { None }),
+    //     )
+    // }
 
     /// Stretch this [IONEX] into a new file [IONEX], increasing grid
     /// spatial precision and applying 2D planar interpolation.
@@ -603,6 +610,24 @@ impl IONEX {
         // update map
         for epoch in self.record.epochs_iter() {}
     }
+
+    // /// Obtain the [MapCell] that contains following [Geometry] completely.
+    // /// ## Input
+    // /// - point: coordinates as [Point]
+    // /// ## Returns
+    // /// - None if map grid does not cointain these coordinates
+    // /// - MapCell that wraps these coordinates
+    // pub fn wrapping_map_cell(&self, geometry: &Geometry<f64>) -> Option<MapCell> {
+    //     let first_epoch = self.first_epoch()?;
+
+    //     for cell in self.synchronous_iter(first_epoch) {
+    //         if cell.contains(&geometry) {
+    //             return Some(cell);
+    //         }
+    //     }
+
+    //     None
+    // }
 }
 
 #[cfg(test)]

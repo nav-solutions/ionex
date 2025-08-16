@@ -1,7 +1,11 @@
 use log::info;
 use std::str::FromStr;
 
-use crate::prelude::{Epoch, Header, Key, Quantized, QuantizedCoordinates, IONEX, TEC};
+use crate::{
+    coordinates::QuantizedCoordinates,
+    prelude::{Epoch, Header, Key, IONEX, TEC},
+    quantized::Quantized,
+};
 
 /// Verifies two [Header]s are strictly identical
 pub fn generic_header_comparison(dut: &Header, model: &Header) {

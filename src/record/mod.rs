@@ -20,69 +20,70 @@ use crate::{
 /// IONEX [Record] contains [MapCell]s in chronological order.
 #[derive(Clone, Debug, Default)]
 pub struct Record {
-    pub(crate) map: BTreeMap<Epoch, MapCell>,
+    pub(crate) map: BTreeMap<Key, TEC>,
 }
 
 impl Record {
-    /// Insert a new [MapCell] into IONEX [Record]
-    pub fn insert(&mut self, epoch: Epoch, cell: MapCell) {
-        self.map.insert(epoch, cell);
+    /// Insert new [TEC] value into IONEX [Record]
+    pub fn insert(&mut self, key: Key, tec: TEC) {
+        self.map.insert(key, tec);
     }
 
     /// Obtain [Record] iterator.
-    pub fn iter(&self) -> Iter<'_, Epoch, MapCell> {
+    pub fn iter(&self) -> Iter<'_, Key, TEC> {
         self.map.iter()
     }
 
-    /// Obtain [MapCell] Iterator (starting on northern eastern most to southern western most cell), at this point in time.
-    pub fn synchronous_iter(&self, epoch: Epoch) -> Box<dyn Iterator<Item = MapCell> + '_> {
-        Box::new(
-            self.iter()
-                .filter_map(move |(k, v)| if *k == epoch { Some(*v) } else { None }),
-        )
-    }
-
     /// Obtain mutable [Record] iterator.
-    pub fn iter_mut(&mut self) -> IterMut<'_, Epoch, MapCell> {
-        self.map.iter_mut()
+    pub fn iter_mut(&mut self) -> Box<dyn Iterator<Item = (Key, &mut TEC)> + '_> {
+        Box::new(self.map.iter_mut().map(|(k, v)| (*k, v)))
     }
 
-    /// Obtain [MapCell] local region from IONEX [Record], at specified point in time.
-    pub fn get(&self, epoch: &Epoch) -> Option<&MapCell> {
-        self.map.get(epoch)
+    /// Obtain [Record] Iterator at specific point in time
+    pub fn synchronous_iter(&self, epoch: Epoch) -> Box<dyn Iterator<Item = (Key, TEC)> + '_> {
+        Box::new(self.iter().filter_map(move |(k, v)| {
+            if k.epoch == epoch {
+                Some((*k, *v))
+            } else {
+                None
+            }
+        }))
     }
 
-    /// Obtain mutable [MapCell] reference from IONEX [Record], as specified point in time.
-    pub fn get_mut(&mut self, epoch: &Epoch) -> Option<&mut MapCell> {
-        self.map.get_mut(epoch)
+    /// Obtain mutable synchronous [Record] iterator
+    pub fn synchronous_iter_mut(
+        &mut self,
+        epoch: Epoch,
+    ) -> Box<dyn Iterator<Item = (Key, &mut TEC)> + '_> {
+        Box::new(self.iter_mut().filter_map(
+            move |(k, v)| {
+                if k.epoch == epoch {
+                    Some((k, v))
+                } else {
+                    None
+                }
+            },
+        ))
+    }
+
+    /// Obtain [TEC] value from IONEX [Record], at specified spatial and temporal point that must exist.
+    pub fn get(&self, key: &Key) -> Option<&TEC> {
+        self.map.get(key)
+    }
+
+    /// Obtain mutable [TEC] reference from IONEX [Record], at specified spatial and temporal point that must exist.
+    pub fn get_mut(&mut self, key: &Key) -> Option<&mut TEC> {
+        self.map.get_mut(key)
     }
 
     /// Obtain [Epoch]s Iterator in chronological order.
     pub fn epochs_iter(&self) -> Box<dyn Iterator<Item = Epoch> + '_> {
-        Box::new(self.map.keys().unique().map(|k| *k))
+        Box::new(self.map.keys().unique().map(|k| k.epoch))
     }
 
     /// Returns first [Epoch] in chronological order
     pub fn first_epoch(&self) -> Option<Epoch> {
         self.epochs_iter().nth(0)
-    }
-
-    /// Obtain the [MapCell] that contains following [Geometry] completely.
-    /// ## Input
-    /// - point: coordinates as [Point]
-    /// ## Returns
-    /// - None if map grid does not cointain these coordinates
-    /// - MapCell that wraps these coordinates
-    pub fn wrapping_map_cell(&self, geometry: &Geometry<f64>) -> Option<MapCell> {
-        let first_epoch = self.first_epoch()?;
-
-        for cell in self.synchronous_iter(first_epoch) {
-            if cell.contains(&geometry) {
-                return Some(cell);
-            }
-        }
-
-        None
     }
 
     /// Synchronous [MapCell] Iterators (starting on northern eastern most to souther western most cell)

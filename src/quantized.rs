@@ -1,5 +1,5 @@
 #[cfg(doc)]
-use crate::prelude::{QuantizedCoordinates, TEC};
+use crate::{coordinates::QuantizedCoordinates, prelude::TEC};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};

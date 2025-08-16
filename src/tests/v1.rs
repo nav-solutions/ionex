@@ -245,14 +245,15 @@ fn parse_ckmg0020() {
     // dump as file
     let mut fd = File::create("ckmg-v1.txt").unwrap();
     let mut writer = BufWriter::new(fd);
-    // ionex.format(&mut writer).unwrap_or_else(|e| {
-    //     panic!("failed to format CKMG V1: {}", e);
-    // });
+
+    ionex.format(&mut writer).unwrap_or_else(|e| {
+        panic!("failed to format CKMG V1: {}", e);
+    });
 
     // parse back
-    // let parsed = IONEX::from_file("ckmg-v1.txt").unwrap_or_else(|e| {
-    //     panic!("failed to parse back CKMG V1: {}", e);
-    // });
+    let parsed = IONEX::from_file("ckmg-v1.txt").unwrap_or_else(|e| {
+        panic!("failed to parse back CKMG V1: {}", e);
+    });
 }
 
 #[test]
