@@ -36,6 +36,7 @@ pub mod system;
 pub mod tec;
 pub mod version;
 
+mod cell;
 mod coordinates;
 mod epoch;
 mod ionosphere;
@@ -53,6 +54,7 @@ use std::{
 };
 
 use geo::{coord, Rect};
+use itertools::Itertools;
 
 #[cfg(feature = "flate2")]
 use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
@@ -62,6 +64,7 @@ use std::collections::BTreeMap;
 use hifitime::prelude::Epoch;
 
 use crate::{
+    cell::MapCell,
     error::{FormattingError, ParsingError},
     header::Header,
     key::Key,
@@ -74,6 +77,7 @@ pub mod prelude {
     // export
     pub use crate::{
         bias::BiasSource,
+        cell::MapCell,
         coordinates::QuantizedCoordinates,
         error::{FormattingError, ParsingError},
         grid::Grid,
@@ -294,8 +298,7 @@ impl IONEX {
             return None;
         }
 
-        let first_epoch = self.first_epoch()?;
-
+        let first_epoch = self.record.first_epoch()?;
         let year = first_epoch.year();
         let doy = first_epoch.day_of_year().round() as u32;
 
@@ -513,16 +516,6 @@ impl IONEX {
         false
     }
 
-    /// Returns [Epoch] Iterator.
-    pub fn epoch_iter(&self) -> Box<dyn Iterator<Item = Epoch> + '_> {
-        Box::new(self.record.iter().map(|(k, _)| k.epoch))
-    }
-
-    /// Returns [Epoch] of first map in chronological order
-    pub fn first_epoch(&self) -> Option<Epoch> {
-        self.epoch_iter().nth(0)
-    }
-
     /// Describe the planary map borders as [Retc]angle. This uses
     /// the [Header] description and assumes the following map respects
     /// that description.
@@ -603,6 +596,27 @@ impl IONEX {
             coord!(x: region.min().x.to_radians(), y: region.min().y.to_radians()),
             coord!(x: region.max().x.to_radians(), y: region.max().y.to_radians()),
         ))
+    }
+
+    /// Stretch this map returning a new [IONEX], increasing grid granularity
+    /// by applying the 2D planar interpolation equation.
+    pub fn planar_stretch(&self, stretch_factor: f64) -> IONEX {
+        let mut s = self.clone();
+        s.planar_stretch_mut(stretch_factor);
+        s
+    }
+
+    /// Stretch this mutable map, increasing grid granularity
+    /// by applying the 2D planar interpolation equation.
+    pub fn planar_stretch_mut(&mut self, stretch_factor: f64) {
+        // update grid
+        self.header.grid.latitude.start *= stretch_factor;
+        self.header.grid.latitude.end *= stretch_factor;
+        self.header.grid.longitude.start *= stretch_factor;
+        self.header.grid.longitude.end *= stretch_factor;
+
+        // update map
+        for epoch in self.record.epochs_iter() {}
     }
 }
 

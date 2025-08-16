@@ -1,3 +1,4 @@
+use log::info;
 use std::str::FromStr;
 
 use crate::prelude::{Epoch, Header, Key, Quantized, QuantizedCoordinates, IONEX, TEC};
@@ -63,6 +64,8 @@ impl<'a> TestPoint<'a> {
 
 /// Verifies all test points in a [IONEX].
 pub fn generic_test(dut: &IONEX, test_points: Vec<TestPoint>, angles_err_deg: f64, alt_err_m: f64) {
+    let mut total_tests = 0;
+
     for test_point in test_points.iter() {
         let mut found = false;
         let mut tec = TEC::default();
@@ -107,7 +110,11 @@ pub fn generic_test(dut: &IONEX, test_points: Vec<TestPoint>, angles_err_deg: f6
             tecu,
             test_point.tecu
         );
+
+        total_tests += 1;
     }
+
+    info!("tested {} coordinates", total_tests);
 }
 
 #[test]
