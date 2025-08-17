@@ -13,7 +13,7 @@ use std::io::BufWriter;
 fn parse_ckmg0020() {
     init_logger();
 
-    let ionex = IONEX::from_file("../data/IONEX/V1/CKMG0020.22I").unwrap_or_else(|e| {
+    let ionex = IONEX::from_gzip_file("../data/IONEX/V1/CKMG0020.22I.gz").unwrap_or_else(|e| {
         panic!("Failed to parse CKMG0020: {}", e);
     });
 

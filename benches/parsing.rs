@@ -1,7 +1,7 @@
 extern crate criterion;
 
-use std::time::Duration;
 use criterion::{criterion_group, criterion_main, Criterion};
+use std::time::Duration;
 
 use ionex::prelude::IONEX;
 
