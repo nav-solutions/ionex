@@ -24,15 +24,12 @@ quantization spec that is constant over entire fileset and is described in the h
 - Seamless Gzip decompression (on `flate2` feature)
 - Full 2D support
 - TEC Root Mean Square is supported
-- File formatting is validated for 2D IONEX, including TEC RMS.
-- File reciprocal garanteed for 2D files including RMS values (strict equality, both ways)
+- File formatting is now supported for 2D IONEX, including RMS maps.
+- Spatial and Temporal interpolation now supported
 
 ## Limitations
 
 - Height map not supported yet
-- This parser/formatter will not work well if coordinates grid 
-is is not the same across regions or between maps. 
-Next version should support that as well.
 
 ## Citation and referencing
 
@@ -51,34 +48,54 @@ Contributions are welcomed:
 ## Getting started
 
 ```rust
-use ionex::prelude::{IONEX};
+use std::fs::File;
+use std::io::BufWriter;
 
-let ionex = IONEX::from_gzip_file("../data/IONEX/V1/CKMG0020.22I.gz")
+use ionex::prelude::*;
+
+// Parse Global/worldwide map
+let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
     .unwrap();
 
-// Most IONEX files provide 2D maps
+// header contains high level information
+// like file standard revision:
+assert_eq!(ionex.header.version.major, 1);
+assert_eq!(ionex.header.version.minor, 0);
+
+// mean altitude above mean-sea-level of the ionosphere
+assert_eq!(ionex.header.grid.altitude.start, 350.0);
+assert_eq!(ionex.header.grid.altitude.end, 350.0);
+
+// radius of the mean-sea-level
+assert_eq!(ionex.header.base_radius_km, 6371.0);
+
+// most file are 2D maps
+// meaning they "only" give the evolution of an isosurface
+// at previous altitude, above mean sea level
 assert!(ionex.is_2d());
 
-// File header gives meaningful information
+// this file is named according to IGS standards
+let descriptor = ionex.production.clone().unwrap();
 
-// TEC maps in chronlogical order, 
-// standard format is 1hour between TEC evolution,
-// starting at midnight, last map at midnight-1: 25 maps per day.
-assert_eq!(ionex.header.number_of_maps, 25);
+// to obtain TEC values at any coordinates, you
+// should use the [MapCell] local region (rectangle quanta)
+// that offers many functions based off the Geo crate.
 
-// chronology is expressed in UTC 
-// 
-assert_eq!(ionex.header.epoch_of_first_map.to_string(), "2020-06-25T00:00:00 UTC");
-assert_eq!(ionex.header.epoch_of_last_map.to_string(), "2020-06-25T00:00:00 UTC");
+// Convenient helper to follow standard conventions
+let filename = ionex.standardized_filename();
 
-// Map borders, this is a worldwide file
+// Dump to file
+let fd = File::create("custom.txt").unwrap();
+let mut writer = BufWriter::new(fd);
 
-assert!(ionex.is_worldwide_ionex()); // only for files that use standard naming
+ionex.format(&mut writer)
+    .unwrap_or_else(|e| {
+        panic!("failed to format IONEX: {}", e);
+    });
 
-// Ground stations that served during evaluation
-assert_eq!(ionex.header.nb_stations, 0);
-
-// Satellites that served during evaluation
-assert_eq!(ionex.header.nb_satellites, 0);
-
+// parse back
+let _ = IONEX::from_file("custom.txt")
+    .unwrap_or_else(|e| {
+        panic!("failed to parse IONEX: {}", e);
+    });
 ```

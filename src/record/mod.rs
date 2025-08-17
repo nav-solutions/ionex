@@ -114,3 +114,56 @@ impl Record {
         self.epochs_iter().nth(0)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::prelude::*;
+
+    #[test]
+    #[ignore]
+    fn ckmg_maps_cells_repiprocal() {
+        let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz").unwrap_or_else(|e| {
+            panic!("Failed to parse CKMG0020: {}", e);
+        });
+
+        // grab all cells
+        let map_cells = ionex.map_cell_iter().collect::<Vec<_>>();
+
+        // build from scratch
+        let record = Record::from_map_cells(
+            ionex.header.grid.altitude.start,
+            ionex.header.grid.latitude.end,
+            ionex.header.grid.latitude.start,
+            ionex.header.grid.longitude.start,
+            ionex.header.grid.longitude.end,
+            &map_cells,
+        );
+
+        // reciprocal
+        assert_eq!(record, ionex.record);
+    }
+
+    #[test]
+    #[ignore]
+    fn jplg_maps_cells_repiprocal() {
+        let ionex = IONEX::from_gzip_file("data/IONEX/V1/jplg0010.17i.gz").unwrap_or_else(|e| {
+            panic!("Failed to parse CKMG0020: {}", e);
+        });
+
+        // grab all cells
+        let map_cells = ionex.map_cell_iter().collect::<Vec<_>>();
+
+        // build from scratch
+        let record = Record::from_map_cells(
+            ionex.header.grid.altitude.start,
+            ionex.header.grid.latitude.end,
+            ionex.header.grid.latitude.start,
+            ionex.header.grid.longitude.start,
+            ionex.header.grid.longitude.end,
+            &map_cells,
+        );
+
+        // reciprocal
+        assert_eq!(record, ionex.record);
+    }
+}

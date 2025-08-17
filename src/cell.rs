@@ -124,10 +124,11 @@ impl MapCell {
     /// - (x/long=1, y/lat=1) is the NE corner
     ///
     /// ```
-    /// use ionex::prelude::{MapCell, TEC};
+    /// use ionex::prelude::{MapCell, Epoch, TEC};
     ///
+    /// let epoch = Epoch::default();
     /// let tec = TEC::from_tecu(1.0);
-    /// let cell = MapCell::from_unitary_tec(tec, tec, tec, tec);
+    /// let cell = MapCell::from_unitary_tec(epoch, tec, tec, tec, tec);
     ///
     /// // 1.0° unitary ECEF span
     /// assert_eq!(cell.latitude_longitude_span_degrees(), (1.0, 1.0));
@@ -164,10 +165,11 @@ impl MapCell {
     /// - (x/long=1, y/lat=1) is the NE corner
     ///
     /// ```
-    /// use ionex::prelude::{MapCell, TEC};
+    /// use ionex::prelude::{MapCell, Epoch, TEC};
     ///
+    /// let epoch = Epoch::default();
     /// let tec = TEC::from_tecu(1.0);
-    /// let cell = MapCell::unitary_null_tec();
+    /// let cell = MapCell::unitary_null_tec(epoch);
     ///
     /// // Null values!
     /// assert_eq!(cell.north_east.tec.tecu(), 0.0);

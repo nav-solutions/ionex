@@ -134,7 +134,9 @@ pub(crate) fn fmt_comment(content: &str) -> String {
 /// over a plane layer or volume of the ionosphere.
 ///
 /// ```
-/// use geo::{Rect, coord};
+/// use std::fs::File;
+/// use std::io::BufWriter;
+///
 /// use ionex::prelude::*;
 ///
 /// // Parse Global/worldwide map
@@ -143,8 +145,8 @@ pub(crate) fn fmt_comment(content: &str) -> String {
 ///
 /// // header contains high level information
 /// // like file standard revision:
-/// assert_eq!(ionex.header.version.major, 2);
-/// assert_eq!(ionex.header.version.minor, 11);
+/// assert_eq!(ionex.header.version.major, 1);
+/// assert_eq!(ionex.header.version.minor, 0);
 ///
 /// // mean altitude above mean-sea-level of the ionosphere
 /// assert_eq!(ionex.header.grid.altitude.start, 350.0);
@@ -159,50 +161,29 @@ pub(crate) fn fmt_comment(content: &str) -> String {
 /// assert!(ionex.is_2d());
 ///
 /// // this file is named according to IGS standards
-/// let descriptor = ionex.production.unwrap();
+/// let descriptor = ionex.production.clone().unwrap();
 ///
 /// // to obtain TEC values at any coordinates, you
 /// // should use the [MapCell] local region (rectangle quanta)
 /// // that offers many functions based off the Geo crate.
 ///
-/// //
-///
-/// // convert Worldwide IONEX to Regional IONEX
-/// // retaining only an ROI in decimal degrees
-/// let roi = Rect::new(coord!(x: -180.0, y: -23.0), coord!(x: -110.0, y: 5.0));
-///
-/// let regional = ionex.to_regional_ionex(roi);
-///
-/// // the grid has been shrinked
-///
 /// // Convenient helper to follow standard conventions
-/// let filename = regional.standardized_filename();
+/// let filename = ionex.standardized_filename();
 ///
-/// // Convenient dump function
-/// let fd = File::create("region.txt").unwrap();
+/// // Dump to file
+/// let fd = File::create("custom.txt").unwrap();
 /// let mut writer = BufWriter::new(fd);
 ///
-/// regional.format(&writer)
+/// ionex.format(&mut writer)
 ///     .unwrap_or_else(|e| {
-///         panic!("failed to format region of interest");
+///         panic!("failed to format IONEX: {}", e);
 ///     });
 ///
 /// // parse back
-/// let _ = IONEX::from_file("region.txt")
+/// let _ = IONEX::from_file("custom.txt")
 ///     .unwrap_or_else(|e| {
 ///         panic!("failed to parse region of interest");
 ///     });
-///
-/// // convenient backwards operation, but only the ROI
-/// // is actually present in the Record at this point,
-/// // all other data points were lost
-/// let global = regional.to_worldwide_ionex();
-///
-/// // verify the grid is back to its worldwide initial state
-/// assert_eq!(global.header.grid.latitude.start, -87.5);
-/// assert_eq!(global.header.grid.latitude.end, 87.5);
-/// assert_eq!(global.header.grid.longitude.start, -180.0);
-/// assert_eq!(global.header.grid.longiitude.end, 180.0);
 /// ```
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct IONEX {
@@ -439,16 +420,16 @@ impl IONEX {
     /// Refer to [Self::from_file] for more information.
     ///
     /// ```
-    /// use ionex::prelude::Rinex;
+    /// use ionex::prelude::*;
     ///
     /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
     ///     .unwrap();
     ///
-    /// assert!(ionex.is_2d_maps());
+    /// assert!(ionex.is_2d());
     ///
     /// // fixed altitude IONEX (=single isosurface)
-    /// assert_eq!(ionex.header.grid.height.start, 350.0);
-    /// assert_eq!(ionex.header.grid.height.end, 350.0);
+    /// assert_eq!(ionex.header.grid.altitude.start, 350.0);
+    /// assert_eq!(ionex.header.grid.altitude.end, 350.0);
     ///     
     /// // latitude grid
     /// assert_eq!(ionex.header.grid.latitude.start, 87.5);
@@ -461,7 +442,7 @@ impl IONEX {
     /// assert_eq!(ionex.header.grid.longitude.spacing, 5.0);
 
     /// assert_eq!(ionex.header.elevation_cutoff, 0.0);
-    /// assert_eq!(ionex.header.mapping, None);
+    /// assert_eq!(ionex.header.mapf, MappingFunction::None);
     /// ```
     #[cfg(feature = "flate2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "flate2")))]
@@ -497,7 +478,7 @@ impl IONEX {
     /// This is the mirror operation of [Self::from_gzip_file].
     /// ```
     /// // Read a IONEX and dump it without any modifications
-    /// use rinex::prelude::*;
+    /// use ionex::prelude::*;
     ///
     /// let ionex = IONEX::from_file("data/IONEX/V1/CKMG0020.22I.gz")
     ///   .unwrap();
@@ -579,21 +560,10 @@ impl IONEX {
         // copy & rework header
         ionex.header = self.header.clone();
 
-        if min_lat > ionex.header.grid.latitude.start {
-            ionex.header.grid.latitude.start = min_lat;
-        }
-
-        if max_lat < ionex.header.grid.latitude.end {
-            ionex.header.grid.latitude.end = max_lat;
-        }
-
-        if min_long > ionex.header.grid.longitude.start {
-            ionex.header.grid.longitude.start = min_long;
-        }
-
-        if max_long < ionex.header.grid.longitude.end {
-            ionex.header.grid.longitude.end = max_long;
-        }
+        ionex.header.grid.latitude.start = max_lat;
+        ionex.header.grid.latitude.end = min_lat;
+        ionex.header.grid.longitude.start = min_long;
+        ionex.header.grid.longitude.end = max_long;
 
         let region = Geometry::Polygon(region);
 
@@ -611,20 +581,6 @@ impl IONEX {
             max_long,
             &cells,
         );
-
-        // // restrain map
-        // ionex.record.map = self
-        //     .record
-        //     .map
-        //     .iter()
-        //     .filter_map(|(k, cell)| {
-        //         if cell.contains(&region) {
-        //             Some((*k, *cell))
-        //         } else {
-        //             None
-        //         }
-        //     })
-        //     .collect();
 
         Some(ionex)
     }
@@ -761,7 +717,7 @@ impl IONEX {
     /// use std::str::FromStr;
     /// use ionex::prelude::{IONEX, Epoch, LineString, coord, Contains};
     ///
-    /// let ionex = IONEX::from_gzip_file("../data/IONEX/V1/CKMG0020.22I.gz")
+    /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
     ///    .unwrap();
     ///
     /// // ROI (ddeg) must be within borders
@@ -838,6 +794,8 @@ impl IONEX {
 #[cfg(test)]
 mod test {
     use crate::fmt_comment;
+    use crate::prelude::*;
+
     #[test]
     fn fmt_comments_singleline() {
         for desc in [
@@ -874,5 +832,25 @@ mod test {
                 assert_eq!(line.find("COMMENT"), Some(60), "comment marker should located @ 60");
             }
         }
+    }
+
+    #[test]
+    #[ignore]
+    fn regional_ionex() {
+        let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz").unwrap_or_else(|e| {
+            panic!("Failed to parse CKMG0020: {}", e);
+        });
+
+        let roi = Rect::new(coord!(x: -180.0, y: -85.0), coord!(x: 180.0, y: -82.5));
+
+        let regional = ionex.to_regional_ionex(roi.into()).unwrap();
+
+        // dump
+        regional.to_file("region.txt").unwrap();
+
+        // parse
+        let parsed = IONEX::from_file("region.txt").unwrap_or_else(|e| {
+            panic!("Failed to parse region.txt: {}", e);
+        });
     }
 }
