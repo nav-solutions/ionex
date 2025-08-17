@@ -52,6 +52,21 @@ impl Linspace {
         }
     }
 
+    /// Returns smallest value between [Self::start] and [Self::end]
+    pub fn min(&self) -> f64 {
+        self.start.min(self.end)
+    }
+
+    /// Returns largest value between [Self::start] and [Self::end]
+    pub fn max(&self) -> f64 {
+        self.start.max(self.end)
+    }
+
+    /// Returns (smallest, largest) values tuplet
+    pub fn minmax(&self) -> (f64, f64) {
+        (self.min(), self.max())
+    }
+
     /// Builds a new Linear space
     pub fn new(start: f64, end: f64, spacing: f64) -> Result<Self, ParsingError> {
         if start == end && spacing == 0.0 {

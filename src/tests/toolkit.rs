@@ -67,7 +67,12 @@ impl<'a> TestPoint<'a> {
 }
 
 /// Verifies all test points in a [IONEX].
-pub fn generic_test(dut: &IONEX, test_points: Vec<TestPoint>, angles_err_deg: f64, alt_err_m: f64) {
+pub fn generic_test(
+    dut: &IONEX,
+    test_points: &Vec<TestPoint>,
+    angles_err_deg: f64,
+    alt_err_m: f64,
+) {
     let mut total_tests = 0;
 
     for test_point in test_points.iter() {

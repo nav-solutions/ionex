@@ -18,7 +18,7 @@ use crate::{
 };
 
 /// IONEX [Record] contains [MapCell]s in chronological order.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Record {
     pub(crate) map: BTreeMap<Key, TEC>,
 }
@@ -78,7 +78,7 @@ impl Record {
 
     /// Obtain [Epoch]s Iterator in chronological order.
     pub fn epochs_iter(&self) -> Box<dyn Iterator<Item = Epoch> + '_> {
-        Box::new(self.map.keys().unique().map(|k| k.epoch))
+        Box::new(self.map.keys().map(|k| k.epoch).unique())
     }
 
     /// Returns first [Epoch] in chronological order

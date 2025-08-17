@@ -37,7 +37,7 @@ impl Eq for Quantized {}
 
 impl Ord for Quantized {
     fn cmp(&self, rhs: &Self) -> Ordering {
-        Ordering::Less
+        self.real_value().total_cmp(&rhs.real_value())
     }
 }
 

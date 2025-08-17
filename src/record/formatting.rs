@@ -39,6 +39,9 @@ impl Record {
             grid.longitude.spacing,
         );
 
+        let (latitude_min, latitude_max) = header.grid.latitude.minmax();
+        let (longitude_min, longitude_max) = header.grid.longitude.minmax();
+
         // NB: this will not work if
         // - grid accuracy changes between regions or epochs
         // - map is not 2D
@@ -47,7 +50,6 @@ impl Record {
 
         let mut line_offset = 0;
         let mut longitude_ptr_ddeg;
-        let mut latitude_ptr_ddeg = header.grid.latitude.start;
 
         // lines buf
         let mut buffer = String::with_capacity(1024);
@@ -68,11 +70,13 @@ impl Record {
                 fmt_ionex(&format_epoch(epoch), "EPOCH OF CURRENT MAP")
             )?;
 
-            while latitude_ptr_ddeg != header.grid.latitude.end {
+            let mut latitude_ptr_ddeg = latitude_max; // following GEO standard angles
+
+            while latitude_ptr_ddeg >= latitude_min {
                 // println!("lat_ptr={}", latitude_ptr_ddeg);
 
                 line_offset = 0;
-                longitude_ptr_ddeg = header.grid.longitude.start;
+                longitude_ptr_ddeg = longitude_min;
 
                 // grid specs
                 writeln!(
@@ -91,7 +95,7 @@ impl Record {
                     )
                 )?;
 
-                while longitude_ptr_ddeg <= header.grid.longitude.end {
+                while longitude_ptr_ddeg <= longitude_max {
                     // println!("long_ptr={}", longitude_ptr_ddeg);
                     // obtain coordinates
                     let coordinates = QuantizedCoordinates::from_decimal_degrees(
@@ -133,6 +137,9 @@ impl Record {
                 fmt_ionex(&format!("{:6}", nth_map + 1), "END OF TEC MAP")
             )?;
         }
+
+        // mark END of file
+        writeln!(w, "{}", fmt_ionex("", "END OF FILE"))?;
 
         Ok(())
     }

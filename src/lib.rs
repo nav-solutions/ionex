@@ -130,7 +130,6 @@ pub(crate) fn fmt_comment(content: &str) -> String {
     fmt_ionex(content, "COMMENT")
 }
 
-#[derive(Clone, Default, Debug)]
 /// [IONEX] is composed of a [Header] section and a [Record] section.
 /// It is the discrete estimation of the Total Electron Content (TEC)
 /// over a plane layer or volume of the ionosphere.
@@ -206,6 +205,7 @@ pub(crate) fn fmt_comment(content: &str) -> String {
 /// assert_eq!(global.header.grid.longitude.start, -180.0);
 /// assert_eq!(global.header.grid.longiitude.end, 180.0);
 /// ```
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct IONEX {
     /// [Header] gives general information and describes following content.
     pub header: Header,
