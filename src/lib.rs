@@ -94,8 +94,8 @@ pub mod prelude {
 
     // pub re-export
     pub use geo::{
-        algorithm::contains::Contains, coord, GeodesicArea, Geometry, LineString, Point, Polygon,
-        Rect,
+        algorithm::contains::Contains, coord, BoundingRect, GeodesicArea, Geometry, LineString,
+        Point, Polygon, Rect,
     };
     pub use gnss::prelude::{Constellation, SV};
     pub use hifitime::{Duration, Epoch, TimeScale, TimeSeries, Unit};
@@ -512,7 +512,7 @@ impl IONEX {
         false
     }
 
-    /// Returns map borders as [Retc]angle. This uses
+    /// Returns map borders as [Rect]angle. This uses
     /// the [Header] description and assumes all maps are within these borders.
     pub fn map_borders_degrees(&self) -> Rect {
         Rect::new(
@@ -549,6 +549,7 @@ impl IONEX {
         let mut ionex = IONEX::default();
 
         let bounding_rect = region.bounding_rect()?;
+
         let (min_long, min_lat) = (bounding_rect.min().x, bounding_rect.min().y);
         let (max_long, max_lat) = (bounding_rect.max().x, bounding_rect.max().y);
 
