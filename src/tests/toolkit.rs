@@ -3,8 +3,7 @@ use std::str::FromStr;
 
 use crate::{
     coordinates::QuantizedCoordinates,
-    prelude::{Epoch, Header, Key, IONEX, TEC},
-    quantized::Quantized,
+    prelude::{Epoch, Header, Key, IONEX},
 };
 
 /// Verifies two [Header]s are strictly identical
@@ -70,41 +69,46 @@ impl<'a> TestPoint<'a> {
 pub fn generic_test(
     dut: &IONEX,
     test_points: &Vec<TestPoint>,
-    angles_err_deg: f64,
-    alt_err_m: f64,
+    // angles_err_deg: f64,
+    // alt_err_m: f64,
 ) {
     let mut total_tests = 0;
 
     for test_point in test_points.iter() {
-        let mut found = false;
-        let mut tec = TEC::default();
         let epoch = Epoch::from_str(test_point.epoch_str).unwrap();
 
         let coordinates = test_point.quantize();
         let key = Key { epoch, coordinates };
 
-        for (k, v) in dut.record.iter() {
-            let latitude_err = (k.latitude_ddeg() - test_point.lat_ddeg).abs();
-            let longitude_err = (k.longitude_ddeg() - test_point.long_ddeg).abs();
-            let alt_err = (k.altitude_km() - test_point.alt_km).abs() * 1.0E3;
-
-            if latitude_err < angles_err_deg
-                && longitude_err < angles_err_deg
-                && alt_err < alt_err_m
-            {
-                if k.altitude_km() == test_point.alt_km {
-                    tec = *v;
-                    found = true;
-                }
-            }
-        }
-
-        if !found {
+        let tec = dut.record.get(&key).unwrap_or_else(|| {
             panic!(
-                "missing data @{} (lat={}°, long={}°, z={}km)",
-                test_point.epoch_str, test_point.lat_ddeg, test_point.long_ddeg, test_point.alt_km,
+                "Missing data @{} (lat={}°, long={}°, z={}km",
+                test_point.epoch_str, test_point.lat_ddeg, test_point.long_ddeg, test_point.alt_km
             );
-        }
+        });
+
+        // for (k, v) in dut.record.iter() {
+        // let latitude_err = (k.latitude_ddeg() - test_point.lat_ddeg).abs();
+        // let longitude_err = (k.longitude_ddeg() - test_point.long_ddeg).abs();
+        // let alt_err = (k.altitude_km() - test_point.alt_km).abs() * 1.0E3;
+
+        // if latitude_err < angles_err_deg
+        //     && longitude_err < angles_err_deg
+        //     && alt_err < alt_err_m
+        // {
+        //     if k.altitude_km() == test_point.alt_km {
+        //         tec = *v;
+        //         found = true;
+        //     }
+        // }
+        // }
+
+        // if !tec.is_none() {
+        //     panic!(
+        //         "missing data @{} (lat={}°, long={}°, z={}km)",
+        //         test_point.epoch_str, test_point.lat_ddeg, test_point.long_ddeg, test_point.alt_km,
+        //     );
+        // }
 
         let tecu = tec.tecu();
         let error = (tecu - test_point.tecu).abs();

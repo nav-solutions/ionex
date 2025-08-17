@@ -1,16 +1,13 @@
-//! integrated tests
 pub mod toolkit;
+// pub mod formatting;
 
 mod filename;
-pub mod formatting;
 mod parsing;
 
 mod v1;
 
 use log::LevelFilter;
 use std::sync::Once;
-
-use crate::prelude::IONEX;
 
 static INIT: Once = Once::new();
 

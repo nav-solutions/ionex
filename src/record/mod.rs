@@ -1,21 +1,11 @@
 mod formatting;
 mod parsing;
 
-use std::collections::{
-    btree_map::{Iter, IterMut, Keys},
-    BTreeMap, HashMap,
-};
+use std::collections::{btree_map::Iter, BTreeMap};
 
 use itertools::Itertools;
-use std::str::FromStr;
-use thiserror::Error;
 
-use geo::{Geometry, Polygon, Rect};
-
-use crate::{
-    prelude::{Comments, Epoch, Header, Key, MapCell, TEC},
-    quantized::Quantized,
-};
+use crate::prelude::{Epoch, Key, MapCell, TEC};
 
 /// IONEX [Record] contains [MapCell]s in chronological order.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -66,14 +56,52 @@ impl Record {
         ))
     }
 
-    /// Obtain [TEC] value from IONEX [Record], at specified spatial and temporal point that must exist.
+    /// Obtain [TEC] value from IONEX [Record], at specified spatial and temporal coordinates that must exist.
+    /// This is an indexing method, not an interpolation method.  
+    /// For interpolation, use the [MapCell] API.
     pub fn get(&self, key: &Key) -> Option<&TEC> {
         self.map.get(key)
     }
 
-    /// Obtain mutable [TEC] reference from IONEX [Record], at specified spatial and temporal point that must exist.
+    /// Obtain mutable [TEC] reference from IONEX [Record], at specified spatial and temporal coordinates that must exist.
+    /// This is an indexing method, not an interpolation method.  
+    /// For interpolation, use the [MapCell] API.
     pub fn get_mut(&mut self, key: &Key) -> Option<&mut TEC> {
         self.map.get_mut(key)
+    }
+
+    /// Collect a IONEX [Record] from a list of [MapCell].
+    pub fn from_map_cells(
+        fixed_altitude_km: f64,
+        min_latitude_ddeg: f64,
+        max_latitude_ddeg: f64,
+        min_longitude_ddeg: f64,
+        max_longitude_ddeg: f64,
+        cells: &[MapCell],
+    ) -> Self {
+        let mut map = Default::default();
+        //let (mut new_lat, mut new_long) = (true, true);
+        //let (mut prev_lat, mut prev_long) = (0.0_f64, 0.0_f64);
+
+        for cell in cells.iter() {
+            // SW bound is always introduced
+            let sw_key = Key::from_decimal_degrees_km(
+                cell.epoch,
+                cell.south_west.point.y(),
+                cell.south_west.point.x(),
+                fixed_altitude_km,
+            );
+
+            // SE bound is introduced for any but first cell
+            // if !new_lat {
+
+            // }
+
+            //if cell.north_east.point.y() == max_latitude {
+            //}
+        }
+
+        Self { map }
     }
 
     /// Obtain [Epoch]s Iterator in chronological order.
@@ -84,30 +112,5 @@ impl Record {
     /// Returns first [Epoch] in chronological order
     pub fn first_epoch(&self) -> Option<Epoch> {
         self.epochs_iter().nth(0)
-    }
-
-    /// Synchronous [MapCell] Iterators (starting on northern eastern most to souther western most cell)
-
-    /// Obtain interpolated [TEC] value at any coordinates and time,
-    /// using temporal 2D interpolation formula.
-    /// Coordinates must be specified in degrees
-    /// ## Inputs
-    /// - instant as [Epoch] which should be within
-    /// the timeframe of this IONEX for the results to be correct.
-    /// - latitude angle in degrees which should lie within the map borders
-    /// - longitude angle in degrees which should lie within the map borders
-    /// ## Returns
-    /// - None if [Epoch] does not exit
-    /// - Zero if map grid is not valid at this [Epoch]
-    /// - Interpolated value otherwise
-    pub fn get_interpolated(
-        &self,
-        epoch: Epoch,
-        latitude_ddeg: f64,
-        longitude_ddeg: f64,
-    ) -> Option<f64> {
-        let mut ret = None;
-
-        ret
     }
 }

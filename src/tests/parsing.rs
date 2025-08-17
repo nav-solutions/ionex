@@ -18,11 +18,11 @@ fn repo_parsing() {
         println!("parsing \"{}\"", fullpath);
 
         if filename.ends_with(".gz") {
-            let ionex = IONEX::from_gzip_file(fullpath).unwrap_or_else(|e| {
+            IONEX::from_gzip_file(fullpath).unwrap_or_else(|e| {
                 panic!("Failed to parse \"{}\": {}", fullpath, e);
             });
         } else {
-            let ionex = IONEX::from_file(fullpath).unwrap_or_else(|e| {
+            IONEX::from_file(fullpath).unwrap_or_else(|e| {
                 panic!("Failed to parse \"{}\": {}", fullpath, e);
             });
         }

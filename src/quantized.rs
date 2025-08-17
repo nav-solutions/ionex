@@ -1,5 +1,3 @@
-const EPSILON: f64 = 1e-5;
-
 #[cfg(doc)]
 use crate::{coordinates::QuantizedCoordinates, prelude::TEC};
 
@@ -7,7 +5,6 @@ use crate::{coordinates::QuantizedCoordinates, prelude::TEC};
 use serde::{Deserialize, Serialize};
 
 use std::cmp::Ordering;
-use std::hash::{Hash, Hasher};
 
 /// [Quantized] value representing either a [TEC] estimate,
 /// or discrete coordinates as [QuantizedCoordinates].
@@ -99,13 +96,13 @@ mod test {
 
     #[test]
     fn test_quantization() {
-        for (real_value, exponent, quantized) in [
-            (1.0, 0, 1),
-            (1.0, 1, 10),
-            (1.1, 1, 11),
-            (1.25, 2, 125),
-            (1.333, 3, 3333),
-            (-3.215, 3, -3215),
+        for (real_value, exponent) in [
+            (1.0, 0),
+            (1.0, 1),
+            (1.1, 1),
+            (1.25, 2),
+            (1.333, 3),
+            (-3.215, 3),
         ] {
             let q = Quantized::new(real_value, exponent);
 

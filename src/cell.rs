@@ -1,4 +1,4 @@
-use geo::{coord, Area, Contains, Coord, CoordNum, GeodesicArea, Geometry, Point, Rect};
+use geo::{Contains, GeodesicArea, Geometry, Point, Rect};
 
 use crate::prelude::{Epoch, TEC};
 
@@ -56,7 +56,7 @@ impl MapCell {
             },
             south_east: MapPoint {
                 point: Point::new(southeast_ddeg.0, southeast_ddeg.1),
-                tec: southwest_tec,
+                tec: southeast_tec,
             },
             south_west: MapPoint {
                 point: Point::new(southwest_ddeg.0, southwest_ddeg.1),
@@ -90,7 +90,7 @@ impl MapCell {
             },
             south_east: MapPoint {
                 point: Point::new(southeast_rad.0.to_degrees(), southeast_rad.1.to_degrees()),
-                tec: southwest_tec,
+                tec: southeast_tec,
             },
             south_west: MapPoint {
                 point: Point::new(southwest_rad.0.to_degrees(), southwest_rad.1.to_degrees()),
@@ -118,10 +118,10 @@ impl MapCell {
 
     /// Defines a unitary [MapCell] ((0,0), (0,1), (1,0), (1,1)) with associated TEC values,
     /// where
-    /// - (x/long=0, y=0) is the SW corner
-    /// - (x/long=1, y=0) is the SE corner
-    /// - (x/long=0, y=1) is the NW corner
-    /// - (x/long=1, y=1) is the NE corner
+    /// - (x/long=0, y/lat=0) is the SW corner
+    /// - (x/long=1, y/lat=0) is the SE corner
+    /// - (x/long=0, y/lat=1) is the NW corner
+    /// - (x/long=1, y/lat=1) is the NE corner
     ///
     /// ```
     /// use ionex::prelude::{MapCell, TEC};
@@ -158,10 +158,10 @@ impl MapCell {
 
     /// Defines a unitary [MapCell] ((0,0), (0,1), (1,0), (1,1)) with Null TEC values,
     /// where
-    /// - (x/long=0, y=0) is the SW corner
-    /// - (x/long=1, y=0) is the SE corner
-    /// - (x/long=0, y=1) is the NW corner
-    /// - (x/long=1, y=1) is the NE corner
+    /// - (x/long=0, y/lat=0) is the SW corner
+    /// - (x/long=1, y/lat=0) is the SE corner
+    /// - (x/long=0, y/lat=1) is the NW corner
+    /// - (x/long=1, y/lat=1) is the NE corner
     ///
     /// ```
     /// use ionex::prelude::{MapCell, TEC};
@@ -267,10 +267,10 @@ impl MapCell {
     /// let t0 = Epoch::default();
     /// let one_tec = TEC::from_tecu(1.0);
     ///
-    /// let center = Point::new(0.5, 0.5); // unitary cell
     /// let cell = MapCell::from_unitary_tec(t0, one_tec, one_tec, one_tec, one_tec);
     ///
     /// // central point
+    /// let center = Point::new(0.5, 0.5);
     /// let tec = cell.spatial_interpolation(center);
     /// assert_eq!(tec.tecu(), 1.0);
     /// ```
@@ -293,7 +293,7 @@ impl MapCell {
     ///
     /// // central point
     /// let tec = cell.spatial_interpolation(Point::new(0.5, 0.5));
-    /// assert_eq!(tec.tecu(), 0.5);
+    /// assert_eq!(tec.tecu(), 0.25);
     ///
     /// // SW boundary
     /// let tec = cell.spatial_interpolation(Point::new(0.0, 0.0));
@@ -301,15 +301,13 @@ impl MapCell {
     ///
     /// // SWern point
     /// let tec = cell.spatial_interpolation(Point::new(0.1, 0.1));
-    /// assert_eq!(tec.tecu(), 0.9);
+    /// assert_eq!(tec.tecu(), 0.81);
     ///
     /// // SWwern point
     /// let tec = cell.spatial_interpolation(Point::new(0.01, 0.01));
-    /// assert_eq!(tec.tecu(), 0.99);
+    /// assert_eq!(tec.tecu(), 0.9801);
     /// ```
     pub fn spatial_interpolation(&self, point: Point<f64>) -> TEC {
-        let borders = self.borders();
-
         let (latitude_span, longitude_span) = self.latitude_longitude_span_degrees();
 
         let (p, q) = (point.y() / latitude_span, point.x() / longitude_span);
@@ -404,7 +402,7 @@ impl MapCell {
 mod test {
     use super::*;
 
-    use crate::prelude::{coord, Epoch, GeodesicArea, Geometry, Point, Unit, TEC};
+    use crate::prelude::{Epoch, Geometry, Point, Unit, TEC};
 
     #[test]
     fn spatial_unitary_interpolation() {
@@ -457,9 +455,9 @@ mod test {
         );
 
         for (x_deg, y_deg, tecu) in [
-            (0.5, 0.5, 0.5),
-            (0.1, 0.1, 0.9),
-            (0.01, 0.01, 0.99),
+            (0.5, 0.5, 0.25),
+            (0.1, 0.1, 0.81),
+            (0.01, 0.01, 0.9801),
             (0.0, 0.0, 1.0),
         ] {
             let point = Point::new(x_deg, y_deg);

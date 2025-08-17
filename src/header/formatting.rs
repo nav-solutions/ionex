@@ -1,7 +1,7 @@
 use crate::{
     epoch::format_header as format_epoch,
-    fmt_ionex,
-    prelude::{Duration, FormattingError, Header, Version},
+    fmt_comment, fmt_ionex,
+    prelude::{FormattingError, Header},
 };
 
 use std::io::{BufWriter, Write};
@@ -156,7 +156,7 @@ impl Header {
 
         // COMMENTS
         for comment in self.comments.iter() {
-            writeln!(w, "{}", fmt_ionex(comment, "COMMENTS"))?;
+            writeln!(w, "{}", fmt_comment(comment))?;
         }
 
         writeln!(w, "{}", fmt_ionex("", "END OF HEADER"))?;

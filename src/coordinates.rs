@@ -30,7 +30,8 @@ impl QuantizedCoordinates {
 
     /// Builds new [QuantizedCoordinates] from coordinates in decimal degrees,
     /// altitude in kilometers, and using desired quantization scaling.
-    pub(crate) fn new(
+    #[cfg(test)]
+    pub fn new(
         lat_ddeg: f64,
         lat_exponent: i8,
         long_ddeg: f64,
@@ -63,20 +64,20 @@ impl QuantizedCoordinates {
         self.lat_ddeg.real_value()
     }
 
-    /// Returns latitude in radians
-    pub fn latitude_rad(&self) -> f64 {
-        self.latitude_ddeg().to_radians()
-    }
+    // /// Returns latitude in radians
+    // pub fn latitude_rad(&self) -> f64 {
+    //     self.latitude_ddeg().to_radians()
+    // }
 
     /// Returns longitude in degrees
     pub fn longitude_ddeg(&self) -> f64 {
         self.long_ddeg.real_value()
     }
 
-    /// Returns longitude in radians
-    pub fn longitude_rad(&self) -> f64 {
-        self.longitude_ddeg().to_radians()
-    }
+    // /// Returns longitude in radians
+    // pub fn longitude_rad(&self) -> f64 {
+    //     self.longitude_ddeg().to_radians()
+    // }
 
     /// Returns longitude in kilometers
     pub fn altitude_km(&self) -> f64 {

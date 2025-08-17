@@ -1,5 +1,5 @@
 use crate::{
-    prelude::{coord, Duration, MappingFunction, Rect, ReferenceSystem, Version, IONEX},
+    prelude::{coord, Duration, MappingFunction, Rect, Version, IONEX},
     tests::{
         init_logger,
         toolkit::{generic_test, TestPoint},
@@ -7,13 +7,13 @@ use crate::{
 };
 
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::BufWriter;
 
 #[test]
 fn parse_ckmg0020() {
     init_logger();
 
-    let ionex = IONEX::from_gzip_file("../data/IONEX/V1/CKMG0020.22I.gz").unwrap_or_else(|e| {
+    let ionex = IONEX::from_file("../data/IONEX/V1/CKMG0020.22I").unwrap_or_else(|e| {
         panic!("Failed to parse CKMG0020: {}", e);
     });
 
@@ -141,14 +141,38 @@ fn parse_ckmg0020() {
         //     tecu: 23.8,
         //     rms: None,
         // },
-        // TestPoint {
-        //     epoch_str: "2022-01-02T05:00:00 UTC",
-        //     lat_ddeg: -82.5,
-        //     long_ddeg: -180.0,
-        //     alt_km: 350.0,
-        //     tecu: 13.2,
-        //     rms: None,
-        // },
+        TestPoint {
+            epoch_str: "2022-01-02T05:00:00 UTC",
+            lat_ddeg: -82.5,
+            long_ddeg: -180.0,
+            alt_km: 350.0,
+            tecu: 13.2,
+            rms: None,
+        },
+        TestPoint {
+            epoch_str: "2022-01-02T05:00:00 UTC",
+            lat_ddeg: -82.5,
+            long_ddeg: -175.5,
+            alt_km: 350.0,
+            tecu: 12.8,
+            rms: None,
+        },
+        TestPoint {
+            epoch_str: "2022-01-02T05:00:00 UTC",
+            lat_ddeg: -82.5,
+            long_ddeg: -170.0,
+            alt_km: 350.0,
+            tecu: 12.4,
+            rms: None,
+        },
+        TestPoint {
+            epoch_str: "2022-01-02T05:00:00 UTC",
+            lat_ddeg: -82.5,
+            long_ddeg: -165.5,
+            alt_km: 350.0,
+            tecu: 12.1,
+            rms: None,
+        },
         // TestPoint {
         //     epoch_str: "2022-01-02T05:00:00 UTC",
         //     lat_ddeg: -87.5,
@@ -175,7 +199,7 @@ fn parse_ckmg0020() {
         // },
     ];
 
-    generic_test(&ionex, &testpoints, 0.1, 1.0);
+    generic_test(&ionex, &testpoints); // 0.1, 1.0);
 
     // check no RMS value
     for (k, tec) in ionex.record.iter() {
@@ -245,7 +269,8 @@ fn parse_ckmg0020() {
     );
 
     // dump as file
-    let mut fd = File::create("ckmg-v1.txt").unwrap();
+    let fd = File::create("ckmg-v1.txt").unwrap();
+
     let mut writer = BufWriter::new(fd);
 
     ionex.format(&mut writer).unwrap_or_else(|e| {
@@ -258,7 +283,7 @@ fn parse_ckmg0020() {
     });
 
     // rerun test
-    generic_test(&parsed, &testpoints, 0.1, 1.0);
+    generic_test(&parsed, &testpoints); // 0.1, 1.0);
 
     // full reciprocity
     // assert_eq!(parsed, ionex);
@@ -294,7 +319,7 @@ fn parse_jplg() {
         },
     ];
 
-    generic_test(&ionex, &testpoints, 0.1, 1.0);
+    generic_test(&ionex, &testpoints); // 0.1, 1.0);
 
     for (k, tec) in ionex.record.iter() {
         // verify RMS map
@@ -361,7 +386,8 @@ fn parse_jplg() {
     );
 
     // dump as file
-    let mut fd = File::create("jplg-v1.txt").unwrap();
+    let fd = File::create("jplg-v1.txt").unwrap();
+
     let mut writer = BufWriter::new(fd);
     ionex.format(&mut writer).unwrap_or_else(|e| {
         panic!("failed to format JPLG V1: {}", e);
@@ -373,7 +399,7 @@ fn parse_jplg() {
     });
 
     // rerun testbench
-    generic_test(&parsed, &testpoints, 0.1, 1.0);
+    generic_test(&parsed, &testpoints); // 0.1, 1.0);
 
     // full reciprocity
     // assert_eq!(parsed, ionex);

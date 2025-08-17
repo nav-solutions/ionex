@@ -105,7 +105,6 @@ pub(crate) fn parse_utc(s: &str) -> Result<Epoch, ParsingError> {
 mod test {
     use super::*;
     use hifitime::Epoch;
-    use hifitime::TimeScale;
     use std::str::FromStr;
 
     #[test]

@@ -17,42 +17,17 @@ impl Record {
         w: &mut BufWriter<W>,
     ) -> Result<(), FormattingError> {
         const FORMATTED_OFFSET: usize = 5;
-        const NUM_LONGITUDES_PER_LINE: usize = 16;
-
-        let grid = header.grid;
-
-        let (altitude_low_km, altitude_high_km, altitude_spacing_km) = (
-            grid.altitude.start,
-            grid.altitude.end,
-            grid.altitude.spacing,
-        );
-
-        let (latitude_north_ddeg, latitude_south_ddeg, latitude_spacing_ddeg) = (
-            grid.latitude.start,
-            grid.latitude.end,
-            grid.latitude.spacing,
-        );
-
-        let (longitude_east_ddeg, longitude_west_ddeg, longitude_spacing_ddeg) = (
-            grid.longitude.start,
-            grid.longitude.end,
-            grid.longitude.spacing,
-        );
-
-        let (latitude_min, latitude_max) = header.grid.latitude.minmax();
-        let (longitude_min, longitude_max) = header.grid.longitude.minmax();
 
         // NB: this will not work if
         // - grid accuracy changes between regions or epochs
         // - map is not 2D
         // - does not support scaling update very smoothly
-        let altitude_km = header.grid.altitude.start;
 
-        let mut line_offset = 0;
+        let (latitude_min, latitude_max) = header.grid.latitude.minmax();
+        let (longitude_min, longitude_max) = header.grid.longitude.minmax();
+
+        let mut line_offset;
         let mut longitude_ptr_ddeg;
-
-        // lines buf
-        let mut buffer = String::with_capacity(1024);
 
         // TEC MAPs. Grid browsing:
         // - browse latitude (starting on northernmost.. to southernmost)

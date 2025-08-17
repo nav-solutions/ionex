@@ -15,14 +15,11 @@
  * Documentation: https://github.com/nav-solutions/ionex
  */
 
-extern crate num_derive;
-
 #[cfg(feature = "serde")]
 #[macro_use]
 extern crate serde;
 
 extern crate gnss_rs as gnss;
-extern crate num;
 
 pub mod bias;
 pub mod error;
@@ -47,6 +44,7 @@ mod record;
 mod tests;
 
 use std::{
+    collections::BTreeMap,
     fs::File,
     io::{BufReader, BufWriter, Read, Write},
     path::Path,
@@ -55,14 +53,12 @@ use std::{
 
 use itertools::Itertools;
 
-use geo::{coord, BoundingRect, Geometry, LineString, Point, Polygon, Rect};
+use geo::{coord, BoundingRect, Geometry, LineString, Polygon, Rect};
 
 #[cfg(feature = "flate2")]
 use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 
-use std::collections::BTreeMap;
-
-use hifitime::prelude::{Duration, Epoch};
+use hifitime::prelude::Epoch;
 
 use crate::{
     cell::{MapCell, MapPoint},
@@ -97,7 +93,10 @@ pub mod prelude {
     };
 
     // pub re-export
-    pub use geo::{coord, GeodesicArea, Geometry, Point, Polygon, Rect};
+    pub use geo::{
+        algorithm::contains::Contains, coord, GeodesicArea, Geometry, LineString, Point, Polygon,
+        Rect,
+    };
     pub use gnss::prelude::{Constellation, SV};
     pub use hifitime::{Duration, Epoch, TimeScale, TimeSeries, Unit};
 }
@@ -363,7 +362,7 @@ impl IONEX {
 
         // format all comments at beginning of file
         for comment in self.comments.iter() {
-            writeln!(writer, "{}", fmt_ionex(comment, "COMMENT"),)?;
+            writeln!(writer, "{}", fmt_comment(comment))?;
         }
 
         self.record.format(&self.header, writer)?;
@@ -599,6 +598,21 @@ impl IONEX {
 
         let region = Geometry::Polygon(region);
 
+        // restrict area
+        let cells = self
+            .map_cell_iter()
+            .filter(|cell| cell.contains(&region))
+            .collect::<Vec<_>>();
+
+        ionex.record = Record::from_map_cells(
+            self.header.grid.altitude.start,
+            min_lat,
+            max_lat,
+            min_long,
+            max_long,
+            &cells,
+        );
+
         // // restrain map
         // ionex.record.map = self
         //     .record
@@ -638,8 +652,9 @@ impl IONEX {
         self.header.grid.longitude.start *= stretch_factor;
         self.header.grid.longitude.end *= stretch_factor;
 
-        // update map
-        for epoch in self.record.epochs_iter() {}
+        // // update map
+        // for epoch in self.record.epochs_iter() {
+        // }
     }
 
     /// Designs a [MapCell] iterator (micro rectangle region made of 4 local points)
@@ -658,9 +673,6 @@ impl IONEX {
             timeseries
                 .cartesian_product(lat_pairs.cartesian_product(long_pairs))
                 .filter_map(move |(epoch, ((lat1, lat2), (long1, long2)))| {
-                    let (lat1_ddeg, lat2_ddeg) = (lat1.real_value(), lat2.real_value());
-                    let (long1_ddeg, long2_ddeg) = (long1.real_value(), long2.real_value());
-
                     let northeast = Key {
                         epoch,
                         coordinates: QuantizedCoordinates::from_quantized(
@@ -742,50 +754,85 @@ impl IONEX {
         )
     }
 
-    /// Interpolate desired region (described by Geometry) at specific point in time,
-    /// using the size /2 neighbouring data points (in past and future).
-    /// The minimal order is 2 which means we will use the previous sample
-    /// and the next sample (in the future).
-    pub fn map_cell_interpolation(
+    /// Interpolate TEC values for all discrete coordinates described by the following [LineString]
+    /// (in decimal degrees), at specific point in time that must exist within this record.
+    /// Otherwise, you should use [Self::temporal_spatial_area_interpolation] to also
+    /// use temporal interpolation from two existing data points.
+    /// ```
+    /// use std::str::FromStr;
+    /// use ionex::prelude::{IONEX, Epoch, LineString, coord, Contains};
+    ///
+    /// let ionex = IONEX::from_gzip_file("../data/IONEX/V1/CKMG0020.22I.gz")
+    ///    .unwrap();
+    ///
+    /// // ROI (ddeg) must be within borders
+    /// let roi_ddeg = LineString::new(vec![
+    ///     coord! { x: -50.0, y: -23.0 },
+    ///     coord! { x: -50.25, y: -23.1 },
+    ///     coord! { x: -50.5, y: -23.2 },
+    /// ]);
+    ///
+    /// // you can double check that
+    /// assert!(ionex.map_borders_degrees().contains(&roi_ddeg));
+    ///
+    /// // Epoch must exist in the record
+    /// let noon = Epoch::from_str("2022-01-02T12:00:00 UTC")
+    ///     .unwrap();
+    ///
+    ///
+    /// ```
+    pub fn spatial_area_interpolation(
         &self,
-        geometry: &Geometry,
+        area: &LineString,
         epoch: Epoch,
-        order: usize,
-    ) -> Option<TEC> {
-        let mut tec = None;
+    ) -> BTreeMap<Key, TEC> {
+        let mut values = BTreeMap::new();
 
-        let mut size = 0.0_f64;
+        let fixed_altitude_km = self.header.grid.altitude.start;
 
-        let (min_t, max_t) = (
-            epoch - order as f64 / 2.0 * self.header.sampling_period,
-            epoch - order as f64 / 2.0 * self.header.sampling_period,
-        );
+        // for all requested coordinates
+        for point in area.points() {
+            let geo = Geometry::Point(point);
 
-        for (cell_1, cell_2) in self.map_cell_iter().tuple_windows() {
-            if cell_1.contains(geometry) && cell_2.contains(geometry) {
-                if cell_1.epoch >= min_t && cell_1.epoch <= max_t {
-                    if cell_2.epoch >= min_t && cell_2.epoch <= max_t {}
+            let key = Key::from_decimal_degrees_km(epoch, point.y(), point.x(), fixed_altitude_km);
+
+            for cell in self.synchronous_map_cell_iter(epoch) {
+                if cell.contains(&geo) {
+                    let tec = cell.spatial_interpolation(point);
+                    values.insert(key, tec);
                 }
             }
         }
 
-        tec
+        values
     }
 
-    /// Stretch this [IONEX] into space and time, increasing
-    /// both spatial and temporal precision, by applying the 2D
-    /// planar and temporal interpolation.
-    ///
-    /// ## Inputs
-    /// - sampling_period: new sampling period as [Duration].
-    /// If the original file uses a 1hr sampling period and you say 30mins here,
-    /// the sampling rate is increased by 2.
-    /// - spatial_factor: spatial stretch factor. If you say 1.5 here, this will
-    /// give a x2 positive streching. If you say 0.5, it will be a negative stretching.
-    /// ## Returns
-    /// - new [IONEX]
-    pub fn temporal_planar_stretch(&self, sampling_period: Duration, spatial_factor: f64) -> IONEX {
-        Default::default()
+    /// Interpolate TEC values for all discrete coordinates described by the following [LineString]
+    /// (in decimal degrees), at specific point in time that does exist within this record.
+    /// We will interpolate the two neighbouring data points, which is not feasible at day boundaries.
+    pub fn temporal_spatial_area_interpolation(&self, area: &LineString, epoch: Epoch) -> Vec<TEC> {
+        let mut values = Vec::new();
+
+        let (min_t, max_t) = (
+            (epoch - self.header.sampling_period),
+            (epoch + self.header.sampling_period),
+        );
+
+        let (min_t, max_t) = (
+            min_t.round(self.header.sampling_period),
+            max_t.round(self.header.sampling_period),
+        );
+
+        // for all requested coordinates
+        for point in area.points() {
+            let geo = Geometry::Point(point);
+
+            for cell in self.map_cell_iter() {
+                if cell.contains(&geo) {}
+            }
+        }
+
+        values
     }
 }
 

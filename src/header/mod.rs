@@ -5,15 +5,11 @@ mod parsing;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    fmt_ionex,
     linspace::Linspace,
     prelude::{
-        Comments, Duration, Epoch, FormattingError, Grid, MappingFunction, ReferenceSystem,
-        TimeSeries, Version,
+        Comments, Duration, Epoch, Grid, MappingFunction, ReferenceSystem, TimeSeries, Version,
     },
 };
-
-use std::io::{BufWriter, Write};
 
 /// IONEX file [Header]
 #[derive(Debug, Clone, PartialEq)]
