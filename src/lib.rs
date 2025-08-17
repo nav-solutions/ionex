@@ -53,7 +53,7 @@ use std::{
 
 use itertools::Itertools;
 
-use geo::{coord, BoundingRect, Geometry, LineString, Polygon, Rect};
+use geo::{coord, BoundingRect, Geometry, LineString, Point, Polygon, Rect};
 
 #[cfg(feature = "flate2")]
 use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
@@ -674,10 +674,22 @@ impl IONEX {
 
                     Some(MapCell {
                         epoch,
-                        north_east: MapPoint::default(),
-                        north_west: MapPoint::default(),
-                        south_east: MapPoint::default(),
-                        south_west: MapPoint::default(),
+                        north_east: MapPoint {
+                            tec: *northeast,
+                            point: Point::new(long1.real_value(), lat1.real_value()),
+                        },
+                        north_west: MapPoint {
+                            tec: *northwest,
+                            point: Point::new(long2.real_value(), lat1.real_value()),
+                        },
+                        south_east: MapPoint {
+                            tec: *southeast,
+                            point: Point::new(long1.real_value(), lat2.real_value()),
+                        },
+                        south_west: MapPoint {
+                            tec: *southwest,
+                            point: Point::new(long2.real_value(), lat2.real_value()),
+                        },
                     })
                 }),
         )
@@ -765,8 +777,12 @@ impl IONEX {
     /// Interpolate TEC values for all discrete coordinates described by the following [LineString]
     /// (in decimal degrees), at specific point in time that does exist within this record.
     /// We will interpolate the two neighbouring data points, which is not feasible at day boundaries.
-    pub fn temporal_spatial_area_interpolation(&self, area: &LineString, epoch: Epoch) -> Vec<TEC> {
-        let mut values = Vec::new();
+    pub fn temporal_spatial_area_interpolation(
+        &self,
+        area: &LineString,
+        epoch: Epoch,
+    ) -> BTreeMap<Key, TEC> {
+        let mut values = BTreeMap::new();
 
         let (min_t, max_t) = (
             (epoch - self.header.sampling_period),
@@ -782,8 +798,27 @@ impl IONEX {
         for point in area.points() {
             let geo = Geometry::Point(point);
 
-            for cell in self.map_cell_iter() {
-                if cell.contains(&geo) {}
+            for cell_t0 in self.synchronous_map_cell_iter(min_t) {
+                if cell_t0.contains(&geo) {
+                    for cell_t1 in self.synchronous_map_cell_iter(max_t) {
+                        if cell_t1.contains(&geo) {
+                            if let Some(interpolated) =
+                                cell_t0.temporal_spatial_interpolation(epoch, point, &cell_t1)
+                            {
+                                let key = Key {
+                                    epoch,
+                                    coordinates: QuantizedCoordinates::from_decimal_degrees(
+                                        point.y(),
+                                        point.x(),
+                                        self.header.grid.altitude.start,
+                                    ),
+                                };
+
+                                values.insert(key, interpolated);
+                            }
+                        }
+                    }
+                }
             }
         }
 

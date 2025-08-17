@@ -83,23 +83,23 @@ impl Record {
         //let (mut new_lat, mut new_long) = (true, true);
         //let (mut prev_lat, mut prev_long) = (0.0_f64, 0.0_f64);
 
-        for cell in cells.iter() {
-            // SW bound is always introduced
-            let sw_key = Key::from_decimal_degrees_km(
-                cell.epoch,
-                cell.south_west.point.y(),
-                cell.south_west.point.x(),
-                fixed_altitude_km,
-            );
+        // for cell in cells.iter() {
+        // SW bound is always introduced
+        // let sw_key = Key::from_decimal_degrees_km(
+        //     cell.epoch,
+        //     cell.south_west.point.y(),
+        //     cell.south_west.point.x(),
+        //     fixed_altitude_km,
+        // );
 
-            // SE bound is introduced for any but first cell
-            // if !new_lat {
+        // SE bound is introduced for any but first cell
+        // if !new_lat {
 
-            // }
+        // }
 
-            //if cell.north_east.point.y() == max_latitude {
-            //}
-        }
+        //if cell.north_east.point.y() == max_latitude {
+        //}
+        // }
 
         Self { map }
     }
