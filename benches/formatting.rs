@@ -42,7 +42,7 @@ fn benchmark(c: &mut Criterion) {
 
     let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz").unwrap();
 
-    formatting_grp.bench_function("OBS/V2", |b| {
+    formatting_grp.bench_function("IONEX/V1", |b| {
         b.iter(|| {
             ionex_formatting(&ionex, &mut buffer);
         })

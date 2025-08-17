@@ -1,4 +1,6 @@
 extern crate criterion;
+
+use std::time::Duration;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use ionex::prelude::IONEX;
@@ -9,6 +11,8 @@ fn ionex_parsing(path: &str) {
 
 fn benchmark(c: &mut Criterion) {
     let mut parsing_grp = c.benchmark_group("parsing");
+
+    parsing_grp.measurement_time(Duration::from_secs(20));
 
     parsing_grp.bench_function("IONEX/V1", |b| {
         b.iter(|| {
