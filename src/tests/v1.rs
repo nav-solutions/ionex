@@ -2,7 +2,7 @@ use crate::{
     prelude::{coord, Duration, MappingFunction, Rect, Version, IONEX},
     tests::{
         init_logger,
-        toolkit::{generic_test, TestPoint},
+        toolkit::{generic_comparison, generic_test, TestPoint},
     },
 };
 
@@ -13,7 +13,7 @@ use std::io::BufWriter;
 fn parse_ckmg0020() {
     init_logger();
 
-    let ionex = IONEX::from_gzip_file("../data/IONEX/V1/CKMG0020.22I.gz").unwrap_or_else(|e| {
+    let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz").unwrap_or_else(|e| {
         panic!("Failed to parse CKMG0020: {}", e);
     });
 
@@ -126,77 +126,45 @@ fn parse_ckmg0020() {
             rms: None,
         },
         TestPoint {
-            epoch_str: "2022-01-02T05:00:00 UTC",
+            epoch_str: "2022-01-02T01:00:00 UTC",
             lat_ddeg: 87.5,
             long_ddeg: -180.0,
             alt_km: 350.0,
             tecu: 9.2,
             rms: None,
         },
-        // TestPoint {
-        //     epoch_str: "2022-01-02T05:00:00 UTC",
-        //     lat_ddeg: 25.0,
-        //     long_ddeg: -180.0,
-        //     alt_km: 350.0,
-        //     tecu: 23.8,
-        //     rms: None,
-        // },
         TestPoint {
-            epoch_str: "2022-01-02T05:00:00 UTC",
-            lat_ddeg: -82.5,
+            epoch_str: "2022-01-02T01:00:00 UTC",
+            lat_ddeg: 30.0,
             long_ddeg: -180.0,
             alt_km: 350.0,
-            tecu: 13.2,
+            tecu: 21.8,
             rms: None,
         },
         TestPoint {
-            epoch_str: "2022-01-02T05:00:00 UTC",
-            lat_ddeg: -82.5,
-            long_ddeg: -175.5,
+            epoch_str: "2022-01-03T00:00:00 UTC",
+            lat_ddeg: -67.5,
+            long_ddeg: -180.0,
             alt_km: 350.0,
             tecu: 12.8,
             rms: None,
         },
         TestPoint {
-            epoch_str: "2022-01-02T05:00:00 UTC",
-            lat_ddeg: -82.5,
+            epoch_str: "2022-01-03T00:00:00 UTC",
+            lat_ddeg: -67.5,
             long_ddeg: -170.0,
             alt_km: 350.0,
-            tecu: 12.4,
+            tecu: 12.9,
             rms: None,
         },
         TestPoint {
-            epoch_str: "2022-01-02T05:00:00 UTC",
-            lat_ddeg: -82.5,
-            long_ddeg: -165.5,
+            epoch_str: "2022-01-03T00:00:00 UTC",
+            lat_ddeg: -67.5,
+            long_ddeg: -165.0,
             alt_km: 350.0,
-            tecu: 12.1,
+            tecu: 13.0,
             rms: None,
         },
-        // TestPoint {
-        //     epoch_str: "2022-01-02T05:00:00 UTC",
-        //     lat_ddeg: -87.5,
-        //     long_ddeg: -180.0,
-        //     alt_km: 350.0,
-        //     tecu: 13.2,
-        //     rms: None,
-        // },
-        // TestPoint {
-        //     epoch_str: "2022-01-02T05:00:00 UTC",
-        //     lat_ddeg: -87.5,
-        //     long_ddeg: 175.5,
-        //     alt_km: 350.0,
-        //     tecu: 13.6,
-        //     rms: None,
-        // },
-        // TestPoint {
-        //     epoch_str: "2022-01-02T06:00:00 UTC",
-        //     lat_ddeg: 87.5,
-        //     long_ddeg: -180.0,
-        //     alt_km: 350.0,
-        //     tecu: 9.2,
-        //     rms: None,
-        // },
     ];
 
     generic_test(&ionex, &testpoints); // 0.1, 1.0);
@@ -283,17 +251,17 @@ fn parse_ckmg0020() {
     });
 
     // rerun test
-    generic_test(&parsed, &testpoints); // 0.1, 1.0);
+    generic_test(&parsed, &testpoints);
 
     // full reciprocity
-    // assert_eq!(parsed, ionex);
+    generic_comparison(&parsed, &ionex);
 }
 
 #[test]
 fn parse_jplg() {
     init_logger();
 
-    let ionex = IONEX::from_gzip_file("../data/IONEX/V1/jplg0010.17i.gz").unwrap_or_else(|e| {
+    let ionex = IONEX::from_gzip_file("data/IONEX/V1/jplg0010.17i.gz").unwrap_or_else(|e| {
         panic!("Failed to parse V1/jplg0010.17i.gz: {}", e);
     });
 
@@ -312,7 +280,7 @@ fn parse_jplg() {
         TestPoint {
             epoch_str: "2017-01-01T00:00:00 UTC",
             lat_ddeg: 87.5,
-            long_ddeg: -175.5,
+            long_ddeg: -175.0,
             alt_km: 450.0,
             tecu: 3.3,
             rms: None,
@@ -356,7 +324,7 @@ fn parse_jplg() {
     assert_eq!(ionex.header.base_radius_km, 6371.0);
     assert_eq!(ionex.header.mapf, MappingFunction::None);
 
-    assert_eq!(ionex.header.sampling_period, Duration::from_hours(1.0));
+    assert_eq!(ionex.header.sampling_period, Duration::from_hours(2.0));
 
     assert_eq!(ionex.header.grid.latitude.start, 87.5);
     assert_eq!(ionex.header.grid.latitude.end, -87.5);
@@ -377,12 +345,23 @@ fn parse_jplg() {
 
     assert_eq!(
         ionex.header.comments[0],
-        "CODE'S KLOBUCHAR-STYLE IONOSPHERE MODEL FOR DAY 002, 2022"
+        "JPL'S GLOBAL IONOSPHERE MAPS YEAR 2017 DAY 001"
     );
 
     assert_eq!(
-        ionex.header.comments[1],
-        "TEC/RMS values in 0.1 TECU; 9999, if no value available"
+        ionex.header.description,
+        Some(
+            "Global Ionospheric Maps (GIM) are generated on an hourly
+and daily basis at JPL using data from up to 100 GPS sites
+of the IGS and others institutions.
+The vertical TEC is modeled in a solar-geomagnetic
+reference frame using bi-cubic splines on a spherical grid.
+A Kalman filter is used to solve simultaneously for
+instrumental biases and VTEC on the grid (as stochastic
+parameters).
+Contact Address:  gpsiono@cobra.jpl.nasa.gov ."
+                .to_string()
+        )
     );
 
     // dump as file
@@ -399,8 +378,8 @@ fn parse_jplg() {
     });
 
     // rerun testbench
-    generic_test(&parsed, &testpoints); // 0.1, 1.0);
+    generic_test(&parsed, &testpoints);
 
     // full reciprocity
-    // assert_eq!(parsed, ionex);
+    generic_comparison(&parsed, &ionex);
 }

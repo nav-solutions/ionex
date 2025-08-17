@@ -40,6 +40,12 @@ impl Header {
 
         writeln!(w, "{}", fmt_ionex(&string, "PGM / RUN BY / DATE"))?;
 
+        if let Some(description) = &self.description {
+            for line in description.lines() {
+                writeln!(w, "{}", fmt_ionex(line, "DESCRIPTION"))?;
+            }
+        }
+
         writeln!(
             w,
             "{}",

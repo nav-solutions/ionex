@@ -30,6 +30,15 @@ pub enum ParsingError {
     #[error("failed to parse number of maps")]
     NumberofMaps,
 
+    #[error("failed to parse number of stations")]
+    NumberofStations,
+
+    #[error("failed to parse number of satellites")]
+    NumberofSatellites,
+
+    #[error("failed to parse elevation cutoff")]
+    ElevationCutoff,
+
     #[error("failed to parse sampling period")]
     SamplingPeriod,
 

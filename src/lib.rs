@@ -400,7 +400,6 @@ impl IONEX {
         };
 
         let fd = File::open(path)?;
-
         let mut reader = BufReader::new(fd);
 
         let mut ionex = Self::parse(&mut reader)?;

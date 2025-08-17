@@ -14,7 +14,7 @@ use std::{
 
 #[cfg(feature = "log")]
 use log::{
-    //debug,
+    // debug,
     error,
     trace,
 };
