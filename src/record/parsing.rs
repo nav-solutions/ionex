@@ -79,6 +79,7 @@ impl Record {
                         ParsingError::ExponentScaling
                     })?;
 
+                    #[cfg(feature = "log")]
                     trace!("{} exponent updated to {}", epoch, exponent);
                 }
 
@@ -118,9 +119,12 @@ impl Record {
                             next_grid_specs = specs;
                             grid_specs_updated = true;
                         },
+                        #[cfg(feature = "log")]
                         Err(e) => {
                             error!("failed to parse grid specs: {}", e);
                         },
+                        #[cfg(not(feature = "log"))]
+                        Err(_) => {},
                     }
                 }
 
