@@ -17,6 +17,46 @@ pub struct TEC {
     height: Option<Quantized>,
 }
 
+impl std::ops::Mul<f64> for TEC {
+    type Output = TEC;
+
+    fn mul(self, rhs: f64) -> Self::Output {
+        let tecu = self.tecu() * rhs;
+
+        let mut tec = TEC::from_tecu(tecu);
+        tec.rms = self.rms.clone();
+        tec.height = self.height.clone();
+        tec
+    }
+}
+
+impl std::ops::MulAssign<f64> for TEC {
+    fn mul_assign(&mut self, rhs: f64) {
+        let tecu = self.tecu() * rhs;
+        *self = self.with_tecu(tecu);
+    }
+}
+
+impl std::ops::Div<f64> for TEC {
+    type Output = TEC;
+
+    fn div(self, rhs: f64) -> Self::Output {
+        let tecu = self.tecu() / rhs;
+
+        let mut tec = TEC::from_tecu(tecu);
+        tec.rms = self.rms.clone();
+        tec.height = self.height.clone();
+        tec
+    }
+}
+
+impl std::ops::DivAssign<f64> for TEC {
+    fn div_assign(&mut self, rhs: f64) {
+        let tecu = self.tecu() / rhs;
+        *self = self.with_tecu(tecu);
+    }
+}
+
 impl TEC {
     /// Builds new [TEC] from TEC estimate expressed in TECu (=10^16 m-2)
     pub fn from_tecu(tecu: f64) -> Self {
@@ -120,5 +160,23 @@ mod test {
 
         let tec = TEC::from_tec_m2(190355078157525800.0);
         assert_eq!(tec.tec(), 1.903550781575258e17);
+    }
+
+    #[test]
+    fn tec_arithmetics() {
+        let mut tec = TEC::from_tecu(9.0);
+        assert_eq!(tec.tecu(), 9.0);
+
+        assert_eq!((tec * 2.0).tecu(), 18.0);
+        assert_eq!((tec / 2.0).tecu(), 4.5);
+
+        tec *= 2.0;
+        assert_eq!(tec.tecu(), 18.0);
+
+        tec /= 2.0;
+        assert_eq!(tec.tecu(), 9.0);
+
+        tec /= 2.0;
+        assert_eq!(tec.tecu(), 4.5);
     }
 }

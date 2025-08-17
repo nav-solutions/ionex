@@ -99,7 +99,7 @@ pub mod prelude {
     // pub re-export
     pub use geo::{coord, GeodesicArea, Geometry, Point, Polygon, Rect};
     pub use gnss::prelude::{Constellation, SV};
-    pub use hifitime::{Duration, Epoch, TimeScale, TimeSeries};
+    pub use hifitime::{Duration, Epoch, TimeScale, TimeSeries, Unit};
 }
 
 /// IONEX comments are readable descriptions.
@@ -616,24 +616,34 @@ impl IONEX {
         Some(ionex)
     }
 
-    // /// Obtain [MapCell] Iterator (starting on northern eastern most to southern western most cell), at this point in time.
-    // pub fn synchronous_iter(&self, epoch: Epoch) -> Box<dyn Iterator<Item = MapCell> + '_> {
-    //     Box::new(
-    //         self.iter()
-    //             .filter_map(move |(k, v)| if *k == epoch { Some(*v) } else { None }),
-    //     )
-    // }
-
-    /// Stretch this [IONEX] into a new file [IONEX], increasing grid
-    /// spatial precision and applying 2D planar interpolation.
-    pub fn planar_stretch(&self, stretch_factor: f64) -> IONEX {
+    /// Stretch this [IONEX] into a new file [IONEX], modifying grid
+    /// spatial precision.
+    /// ## Inputs
+    /// - stretch > 1.0: increases precision.  
+    /// The 2D planar interpolation is applied to define the TEC as originally
+    /// non existing coordinates.
+    /// - stretch < 1.0: reduces precision.  
+    pub fn grid_precision_stretch(&self, stretch_factor: f64) -> IONEX {
         let mut s = self.clone();
-        s.planar_stretch_mut(stretch_factor);
+        s.grid_precision_stretch_mut(stretch_factor);
         s
     }
 
-    /// Designs a [MapCell] iterator, to iterate on individual
-    /// local regions which can be interpolated.
+    /// Stretch this mutable [IONEX], modifying the grid precision.
+    /// See [Self::grid_precision_stretch] for more information.
+    pub fn grid_precision_stretch_mut(&mut self, stretch_factor: f64) {
+        // update grid
+        self.header.grid.latitude.start *= stretch_factor;
+        self.header.grid.latitude.end *= stretch_factor;
+        self.header.grid.longitude.start *= stretch_factor;
+        self.header.grid.longitude.end *= stretch_factor;
+
+        // update map
+        for epoch in self.record.epochs_iter() {}
+    }
+
+    /// Designs a [MapCell] iterator (micro rectangle region made of 4 local points)
+    /// that can then be interpolated.
     pub fn map_cell_iter(&self) -> Box<dyn Iterator<Item = MapCell> + '_> {
         let timeseries = self.header.timeseries();
 
@@ -706,6 +716,21 @@ impl IONEX {
         )
     }
 
+    /// Returns the [MapCell] that contains following [Geometry].
+    ///
+    /// ## Input
+    /// - epoch: [Epoch] that must exist in this [IONEX]
+    /// - geometry: possibly complex [Geometry] to contain (completely).
+    pub fn wrapping_map_cell(&self, epoch: Epoch, geometry: &Geometry<f64>) -> Option<MapCell> {
+        for cell in self.synchronous_map_cell_iter(epoch) {
+            if cell.contains(&geometry) {
+                return Some(cell);
+            }
+        }
+
+        None
+    }
+
     /// Obtain a synchronous [MapCell] iterator at specific point in time.
     pub fn synchronous_map_cell_iter(
         &self,
@@ -715,6 +740,36 @@ impl IONEX {
             self.map_cell_iter()
                 .filter_map(move |v| if v.epoch == epoch { Some(v) } else { None }),
         )
+    }
+
+    /// Interpolate desired region (described by Geometry) at specific point in time,
+    /// using the size /2 neighbouring data points (in past and future).
+    /// The minimal order is 2 which means we will use the previous sample
+    /// and the next sample (in the future).
+    pub fn map_cell_interpolation(
+        &self,
+        geometry: &Geometry,
+        epoch: Epoch,
+        order: usize,
+    ) -> Option<TEC> {
+        let mut tec = None;
+
+        let mut size = 0.0_f64;
+
+        let (min_t, max_t) = (
+            epoch - order as f64 / 2.0 * self.header.sampling_period,
+            epoch - order as f64 / 2.0 * self.header.sampling_period,
+        );
+
+        for (cell_1, cell_2) in self.map_cell_iter().tuple_windows() {
+            if cell_1.contains(geometry) && cell_2.contains(geometry) {
+                if cell_1.epoch >= min_t && cell_1.epoch <= max_t {
+                    if cell_2.epoch >= min_t && cell_2.epoch <= max_t {}
+                }
+            }
+        }
+
+        tec
     }
 
     /// Stretch this [IONEX] into space and time, increasing
@@ -731,42 +786,6 @@ impl IONEX {
     /// - new [IONEX]
     pub fn temporal_planar_stretch(&self, sampling_period: Duration, spatial_factor: f64) -> IONEX {
         Default::default()
-    }
-
-    /// Stretch this mutable map, increasing grid granularity
-    /// by applying the 2D planar interpolation equation.
-    ///
-    /// ## Inputs
-    /// the sampling rate is increased by 2.
-    /// - spatial_factor: spatial stretch factor. If you say 1.5 here, this will
-    /// give a x2 positive streching. If you say 0.5, it will be a negative stretching.
-    pub fn planar_stretch_mut(&mut self, stretch_factor: f64) {
-        // update grid
-        self.header.grid.latitude.start *= stretch_factor;
-        self.header.grid.latitude.end *= stretch_factor;
-        self.header.grid.longitude.start *= stretch_factor;
-        self.header.grid.longitude.end *= stretch_factor;
-
-        // update map
-        for epoch in self.record.epochs_iter() {}
-    }
-
-    /// Returns the [MapCell] that contains following [Geometry] completely.
-    ///
-    /// ## Input
-    /// - epoch: [Epoch] that must exist in this [IONEX]
-    /// - geometry: possibly complex [Geometry] to completely contain.
-    /// ## Returns
-    /// - None if map grid does not cointain these coordinates
-    /// - MapCell that wraps these coordinates
-    pub fn wrapping_map_cell(&self, epoch: Epoch, geometry: &Geometry<f64>) -> Option<MapCell> {
-        for cell in self.synchronous_map_cell_iter(epoch) {
-            if cell.contains(&geometry) {
-                return Some(cell);
-            }
-        }
-
-        None
     }
 }
 
