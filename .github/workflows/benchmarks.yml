@@ -39,7 +39,7 @@ jobs:
           override: true
 
       - name: Bench
-        run: cargo bench --bench ${{ matrix.bench }} -- --sample-size ${{ matrix.sample_size }}  > ${{ matrix.bench }}.txt
+        run: cargo bench --all-features --bench ${{ matrix.bench }} -- --sample-size ${{ matrix.sample_size }}  > ${{ matrix.bench }}.txt
 
       - name: Upload Results
         run: python tools/parse_crit_benchmark.py < ${{ matrix.bench }}.txt >> $GITHUB_STEP_SUMMARY
