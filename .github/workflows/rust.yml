@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "*"
+  pull_request:
+    branches:
+      - main
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build 
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+        fetch-depth: 0
+    
+    - uses: actions-rs/cargo@v1
+      name: Linter 
+      with:
+        command: fmt
+        args: --all -- --check
+    
+    - uses: actions-rs/toolchain@v1
+      name: Install Rust
+      with:
+        toolchain: 1.82.0
+        override: true
+    
+    - uses: actions-rs/cargo@v1
+      name: Build (default)
+      with:
+        command: build
+        args: -r
+    
+    - uses: actions-rs/cargo@v1
+      name: Build (all features)
+      with:
+        command: build
+        args: --all-features
+    
+    - uses: actions-rs/cargo@v1
+      name: Tests
+      with:
+        command: test
+        args: --all-features
+    
+  documentation:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+        fetch-depth: 0
+    
+    - uses: actions-rs/toolchain@v1
+      name: Install nightly
+      with:
+        toolchain: nightly
+        override: true
+    
+    - name: Documentation
+      run: |
+        ./tools/builddoc.sh

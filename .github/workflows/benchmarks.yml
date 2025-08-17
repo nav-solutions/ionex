@@ -1,0 +1,45 @@
+name: Benchmarking
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "*"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  benchmarking:
+    name: Benchmarking (API)
+    runs-on: ubuntu-latest
+    env:
+      CARGO: cargo
+      RUST_BACKTRACE: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - bench: parsing
+          sample_size: 1000
+        - bench: formatting
+          sample_size: 1000
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.82.0
+          override: true
+
+      - name: Bench
+        run: cargo bench --bench ${{ matrix.bench }} -- --sample-size ${{ matrix.sample_size }}  > ${{ matrix.bench }}.txt
+
+      - name: Upload Results
+        run: python tools/parse_crit_benchmark.py < ${{ matrix.bench }}.txt >> $GITHUB_STEP_SUMMARY

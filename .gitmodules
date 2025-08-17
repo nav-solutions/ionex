@@ -1,3 +1,6 @@
 [submodule "data"]
 	path = data
 	url = git@github.com:nav-solutions/data.git
+[submodule "tools"]
+	path = tools
+	url = git@github.com:nav-solutions/tools.git
