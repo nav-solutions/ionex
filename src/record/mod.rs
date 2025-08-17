@@ -70,7 +70,8 @@ impl Record {
         self.map.get_mut(key)
     }
 
-    /// Collect a IONEX [Record] from a list of [MapCell].
+    /// Collect a IONEX [Record] from a list of [MapCell].  
+    /// NB: work in progress, not validated yet.
     pub fn from_map_cells(
         fixed_altitude_km: f64,
         min_latitude_ddeg: f64,

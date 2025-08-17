@@ -594,6 +594,7 @@ impl IONEX {
     /// The 2D planar interpolation is applied to define the TEC as originally
     /// non existing coordinates.
     /// - stretch < 1.0: reduces precision.  
+    /// NB: work in progress, not validated yet.
     pub fn grid_precision_stretch(&self, stretch_factor: f64) -> IONEX {
         let mut s = self.clone();
         s.grid_precision_stretch_mut(stretch_factor);
@@ -601,7 +602,8 @@ impl IONEX {
     }
 
     /// Stretch this mutable [IONEX], modifying the grid precision.
-    /// See [Self::grid_precision_stretch] for more information.
+    /// See [Self::grid_precision_stretch] for more information.  
+    /// NB: work in progress, not validated yet.
     pub fn grid_precision_stretch_mut(&mut self, stretch_factor: f64) {
         // update grid
         self.header.grid.latitude.start *= stretch_factor;
