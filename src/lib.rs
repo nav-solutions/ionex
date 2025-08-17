@@ -521,7 +521,8 @@ impl IONEX {
         )
     }
 
-    /// Stretch this Regional [IONEX] to a Global/Worldwide [IONEX]
+    /// Stretch this Regional [IONEX] to a Global/Worldwide [IONEX].  
+    /// NB: work in progress, not validated yet.
     pub fn to_worldwide_ionex(&self) -> IONEX {
         let mut ionex = self.clone();
 
@@ -542,7 +543,8 @@ impl IONEX {
 
     /// Converts this Global/Worldwide [IONEX] to Regional [IONEX]
     /// delimited by (possibly complex) bounding geometry, for which [BoundingRect] needs
-    /// to return correctly. Each boundary coordinates must also be expressed in degrees.
+    /// to return correctly. Each boundary coordinates must also be expressed in degrees.  
+    /// NB: work in progress, not validated yet.
     pub fn to_regional_ionex(&self, region: Polygon) -> Option<IONEX> {
         let mut ionex = IONEX::default();
 
