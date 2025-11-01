@@ -2,6 +2,9 @@ mod formatting;
 mod parsing;
 
 #[cfg(feature = "serde")]
+mod qc;
+
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 use crate::{
