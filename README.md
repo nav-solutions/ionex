@@ -20,7 +20,7 @@ quantization spec that is constant over entire fileset and is described in the h
 ## Advantages
 
 - Fast and powerful parser
-- Open source
+- Open sources: read and access all the code
 - Seamless Gzip decompression (on `flate2` feature)
 - Full 2D support
 - TEC Root Mean Square is supported
@@ -44,6 +44,27 @@ Contributions are welcomed:
 - open an [Issue on Github.com](https://github.com/nav-solutions/ionex/issues) 
 - follow our [Discussions on Github.com](https://github.com/nav-solutions/discussions)
 - join our [Discord channel](https://discord.gg/EqhEBXBmJh)
+
+RINEX formats & applications
+============================
+
+| Type                       | Parser                                                                  | Writer              |      Content                                  | Record Indexing                                                                  | Timescale  |
+|----------------------------|-------------------------------------------------------------------------|---------------------|-----------------------------------------------|----------------------------------------------------------------------------------| -----------|
+| Navigation  (NAV)          | [Provided by the RINEX parser]((https://github.com/nav-solutions/rinex) | :heavy_check_mark:  | Ephemerides, Ionosphere models                | [NavKey](https://docs.rs/rinex/latest/rinex/navigation/struct.NavKey.html)       | SV System time broadcasting this message |
+| Observation (OBS)          | [Provided by the RINEX parser]((https://github.com/nav-solutions/rinex) | :heavy_check_mark:  | Phase, Pseudo Range, Doppler, SSI             | [ObsKey](https://docs.rs/rinex/latest/rinex/observation/struct.ObsKey.html)      | GNSS (any) |
+|  CRINEX  (Compressed OBS)  | [Provided by the RINEX parser]((https://github.com/nav-solutions/rinex) | :heavy_check_mark:  | Phase, Pseudo Range, Doppler, SSI             | [ObsKey](https://docs.rs/rinex/latest/rinex/observation/struct.ObsKey.html)      | GNSS (any) |
+|  Meteorological data (MET) | [Provided by the RINEX parser]((https://github.com/nav-solutions/rinex) | :heavy_check_mark:  | Meteo sensors data (Temperature, Moisture..)  | [MeteoKey](https://docs.rs/rinex/latest/rinex/meteo/struct.MeteoKey.html)        | UTC | 
+|  Clocks (CLK)              | [Provided by the RINEX parser]((https://github.com/nav-solutions/rinex) | :construction:      | Precise temporal states                       | [ClockKey](https://docs.rs/rinex/latest/rinex/clock/record/struct.ClockKey.html) | GNSS (any) |
+|  Antenna (ATX)             | [Provided by the RINEX parser]((https://github.com/nav-solutions/rinex) | :construction:      | Precise RX/SV Antenna calibration             | `antex::Antenna` | :heavy_minus_sign: |
+|  Ionosphere Maps  (IONEX)  | :heavy_check_mark:                                                      |  :heavy_check_mark: | Ionosphere Electron density                   | [Record Key](https://docs.rs/ionex/latest/ionex/key/struct.Key.html) | UTC |
+|  DORIS RINEX               | [Provided by the DORIS parser](https://github.com/nav-solutions/doris)  |  :heavy_check_mark: | Temperature, Moisture, Pseudo Range and Phase observations | [Record Key](https://docs.rs/doris-rs/latest/doris_rs/record/struct.Key.html) | TAI / "DORIS" timescale |
+
+Contributions
+=============
+
+Contributions are welcomed, we still have a lot to accomplish, any help is always appreciated.   
+[We wrote these few lines](CONTRIBUTING.md) to help you understand the inner workings.    
+Join us on [Discord](https://discord.gg/EqhEBXBmJh) to discuss ongoing and future developments.
 
 ## Getting started
 
