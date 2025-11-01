@@ -844,6 +844,49 @@ impl IONEX {
     }
 }
 
+/// Merge two [IONEX] structures into one.
+/// This requires a few mandatory steps:
+/// - reference systems must match
+/// - maps dimension must match
+/// - both must use the same mapping function
+///
+/// Different sampling rate are supported, because the IONEX
+/// description allows to describe that, but you will windup with
+/// non constant sample rates.
+#[cfg(feature = "qc")]
+impl gnss_qc_traits::Merge for IONEX {
+    fn merge(&self, rhs: &Self) -> Result<Self, gnss_qc_traits::MergeError> {
+        let mut s = self.clone();
+        s.merge_mut(rhs)?;
+        Ok(s)
+    }
+
+    fn merge_mut(&mut self, rhs: &Self) -> Result<(), gnss_qc_traits::MergeError> {
+        self.header.merge_mut(&rhs.header)?;
+        self.record.merge_mut(&rhs.record)?;
+
+        match self.production {
+            Some(ref mut prods) => {
+                if let Some(rhs) = &rhs.production {
+                    prods.merge_mut(rhs)?;
+                }
+            },
+            None => {
+                if let Some(rhs) = &rhs.production {
+                    self.production = Some(rhs.clone());
+                }
+            },
+        }
+
+        // add new comments
+        for comment in rhs.comments.iter() {
+            self.comments.push(comment.clone());
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{div_ceil, fmt_comment, prelude::*};

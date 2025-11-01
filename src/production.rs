@@ -127,6 +127,33 @@ impl std::str::FromStr for ProductionAttributes {
     }
 }
 
+#[cfg(feature = "qc")]
+impl gnss_qc_traits::Merge for ProductionAttributes {
+    fn merge(&self, rhs: &Self) -> Result<Self, gnss_qc_traits::MergeError> {
+        let mut s = self.clone();
+        s.merge_mut(rhs)?;
+        Ok(s)
+    }
+
+    fn merge_mut(&mut self, rhs: &Self) -> Result<(), gnss_qc_traits::MergeError> {
+        if rhs.year < self.year {
+            self.year = rhs.year;
+            self.doy = rhs.doy;
+        }
+
+        if self.region == Region::Regional && rhs.region == Region::Global {
+            self.region = Region::Global;
+        }
+
+        #[cfg(feature = "flate2")]
+        if self.gzip_compressed && !rhs.gzip_compressed {
+            self.gzip_compressed = false;
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

@@ -3,6 +3,7 @@ pub mod toolkit;
 
 mod filename;
 mod parsing;
+mod qc;
 
 mod v1;
 
