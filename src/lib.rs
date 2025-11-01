@@ -880,7 +880,9 @@ impl gnss_qc_traits::Merge for IONEX {
 
         // add new comments
         for comment in rhs.comments.iter() {
-            self.comments.push(comment.clone());
+            if !self.comments.contains(&comment) {
+                self.comments.push(comment.clone());
+            }
         }
 
         Ok(())

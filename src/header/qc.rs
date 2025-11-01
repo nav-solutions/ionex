@@ -80,7 +80,9 @@ impl Merge for Header {
         // TODO: merge grid def
 
         for comment in rhs.comments.iter() {
-            self.comments.push(comment.clone());
+            if !self.comments.contains(&comment) {
+                self.comments.push(comment.clone());
+            }
         }
 
         Ok(())
