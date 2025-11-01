@@ -22,27 +22,36 @@ all-features = true
 rustdoc-args = ["--cfg", "docrs", "--generate-link-to-definition"]
 
 [features]
-default = ["flate2"] # gzip files supported by default
+# serde by default
+# gzip files supported by default
+default = ["serde", "flate2"] 
+
+serde = [
+    "dep:serde",
+    "gnss-rs/serde",
+    "hifitime/serde",
+]
+
+[dependencies.gnss-rs]
+git = "https://github.com/nav-solutions/gnss"
+rev = "dc4d4c2d413a3be90a3fa08a6ab29079eec13923"
+features = ["std", "domes", "cospar", "sbas"]
+
+[dependencies.hifitime]
+version = "4.1"
+features = ["std"]
+
+[dependencies]
+geo = "0.31"
+thiserror = "2"
+itertools = "0.14"
+log = { version = "0.4", optional = true }
+flate2 = { version = "1", optional = true }
+serde = { version = "1.0", optional = true, default-features = false, features = ["derive"] }
 
 [build-dependencies]
 serde_json = { version = "1.0", features = ["preserve_order"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
-
-[dependencies]
-geo = "0.30"
-thiserror = "2"
-itertools = "0.14.0"
-num-integer = "0.1.44" # TODO: see if we can get rid of div_ceil
-
-# activate parser logs
-log = { version = "0.4", optional = true }
-
-# support gzip files
-flate2 = { version = "1", optional = true }
-
-gnss-rs = { version = "2.4", features = ["serde"] }
-hifitime = { version = "4.1", features = ["serde", "std"] }
-serde = { version = "1.0", optional = true, default-features = false, features = ["derive"] }
 
 [dev-dependencies]
 log = "0.4"
@@ -56,3 +65,4 @@ harness = false
 [[bench]]
 name = "formatting"
 harness = false
+

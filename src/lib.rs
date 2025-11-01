@@ -104,13 +104,26 @@ pub mod prelude {
 /// IONEX comments are readable descriptions.
 pub type Comments = Vec<String>;
 
+/// Divides provided usize, returns ceil rounded value.
+fn div_ceil(value: usize, divider: usize) -> usize {
+    let q = value.div_euclid(divider);
+    let r = value.rem_euclid(divider);
+    if r == 0 {
+        q
+    } else {
+        q + 1
+    }
+}
+
 /// macro to format one header line or a comment
 pub(crate) fn fmt_ionex(content: &str, marker: &str) -> String {
     if content.len() < 60 {
         format!("{:<padding$}{}", content, marker, padding = 60)
     } else {
         let mut string = String::new();
-        let nb_lines = num_integer::div_ceil(content.len(), 60);
+
+        let nb_lines = div_ceil(content.len(), 60);
+
         for i in 0..nb_lines {
             let start_off = i * 60;
             let end_off = std::cmp::min(start_off + 60, content.len());
@@ -833,8 +846,7 @@ impl IONEX {
 
 #[cfg(test)]
 mod test {
-    use crate::fmt_comment;
-    use crate::prelude::*;
+    use crate::{div_ceil, fmt_comment, prelude::*};
 
     #[test]
     fn fmt_comments_singleline() {
@@ -862,7 +874,7 @@ mod test {
     fn fmt_wrapped_comments() {
         for desc in ["just trying to form a very lengthy comment that will overflow since it does not fit in a single line",
             "just trying to form a very very lengthy comment that will overflow since it does fit on three very meaningful lines. Imazdmazdpoakzdpoakzpdokpokddddddddddddddddddaaaaaaaaaaaaaaaaaaaaaaa"] {
-            let nb_lines = num_integer::div_ceil(desc.len(), 60);
+            let nb_lines = div_ceil(desc.len(), 60);
             let comments = fmt_comment(desc);
 
             assert_eq!(comments.lines().count(), nb_lines);
