@@ -1,6 +1,9 @@
 mod formatting;
 mod parsing;
 
+#[cfg(feature = "qc")]
+mod qc;
+
 use std::collections::{btree_map::Iter, BTreeMap};
 
 use itertools::Itertools;

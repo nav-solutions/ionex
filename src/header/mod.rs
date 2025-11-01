@@ -1,7 +1,7 @@
 mod formatting;
 mod parsing;
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "qc")]
 mod qc;
 
 #[cfg(feature = "serde")]
