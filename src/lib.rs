@@ -3,7 +3,6 @@
 )]
 #![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![allow(clippy::type_complexity)]
 
 /*
  * IONEX is part of the nav-solutions framework.
