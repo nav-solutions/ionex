@@ -67,13 +67,13 @@ impl Linspace {
         (self.min(), self.max())
     }
 
-    /// Stretch this mutable [Linspace] by a positive, possibly fractional number,
+    /// Stretch this mutable [Linspace] by a finite positive number (possibly fractional),
     /// while preserving the initial grid quantization (point spacing).
     /// This only modifies the [Linspace] dimensions.
     /// To modify the sampling, use [Self::resample_mut].
     pub fn stretch_mut(&mut self, factor: f64) -> Result<(), Error> {
-        if factor.is_sign_negative() {
-            return Err(Error::NegativeStretchFactor);
+        if !factor.is_normal() {
+            return Err(Error::InvalidStretchFactor);
         }
         self.start *= factor;
         self.end *= factor;
@@ -81,10 +81,10 @@ impl Linspace {
     }
 
     /// Stretch this [Linspace] to a new [Linspace] definition. 
-    /// The streetching factor must be a positive number.
-    /// this preserves the initial grid quantization (point spacing).
-    /// This only modifies the [Linspace] dimensions.
-    /// To modify the sampling, use [Self::resampled].
+    /// The streetching factor must be a finite positive (possibly fractional) number.
+    /// This preserves the initial grid quantization (point spacing) and 
+    /// only affects the [Linspace] dimensions. Use [Self::resampled] to resample
+    /// the [Linspace].
     pub fn stretched(&self, factor: f64) -> Result<Self, Error> {
         let mut s = self.clone();
         s.stretch_mut(factor)?;
@@ -92,11 +92,11 @@ impl Linspace {
     }
 
     /// Resample this mutable [Linspace] so the point spacing is modified.
-    /// This is a multiplicative stretching factor, which must be a positive number.
+    /// This is a multiplicative stretching factor, which must be a finite positive number (possibly fractional).
     /// This does not modify the [Linspace] dimensions, use [Self::stretch_mut] to modify dimensions.
     pub fn resample_mut(&mut self, factor: f64) -> Result<(), Error> {
-        if factor.is_sign_negative() {
-            return Err(Error::NegativeStretchFactor);
+        if !factor.is_normal() {
+            return Err(Error::InvalidStretchFactor);
         }
         self.spacing *= factor;
         Ok(())
@@ -104,7 +104,7 @@ impl Linspace {
 
     /// Resample this [Linspace] to a new [Linspace] definition, modifying the point 
     /// spacing but preserving the initial dimensions. The resampling factor
-    /// must be positive, possibly fractional number. This does not modify the dimensions,
+    /// must be a finite positive, possibly fractional number. This does not modify the dimensions,
     /// use [Self::stretched] to modify the dimensions.
     pub fn resampled(&self, factor: f64) -> Result<Self, Error> {
         let mut s = self.clone();

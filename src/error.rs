@@ -93,8 +93,8 @@ pub enum ParsingError {
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("strech factor must be positive")]
-    NegativeStretchFactor,
+    #[error("strech factor must be positive finite number")]
+    InvalidStretchFactor,
 }
 
 /// Errors that may rise during Formatting process
