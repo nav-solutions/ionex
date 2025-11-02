@@ -350,7 +350,7 @@ impl MapCell {
     ///
     /// // central point
     /// let center = Point::new(0.5, 0.5);
-    /// let tec = cell.spatial_interpolation(center);
+    /// let tec = cell.spatial_tec_interp(center);
     /// assert_eq!(tec.tecu(), 1.0);
     /// ```
     ///
@@ -371,19 +371,19 @@ impl MapCell {
     /// let cell = MapCell::from_unitary_tec(t0, gradient.0, gradient.1, gradient.2, gradient.3);
     ///
     /// // central point
-    /// let tec = cell.spatial_interpolation(Point::new(0.5, 0.5));
+    /// let tec = cell.spatial_tec_interp(Point::new(0.5, 0.5));
     /// assert_eq!(tec.tecu(), 0.25);
     ///
     /// // SW boundary
-    /// let tec = cell.spatial_interpolation(Point::new(0.0, 0.0));
+    /// let tec = cell.spatial_tec_interp(Point::new(0.0, 0.0));
     /// assert_eq!(tec.tecu(), 1.0);
     ///
     /// // SWern point
-    /// let tec = cell.spatial_interpolation(Point::new(0.1, 0.1));
+    /// let tec = cell.spatial_tec_interp(Point::new(0.1, 0.1));
     /// assert_eq!(tec.tecu(), 0.81);
     ///
     /// // SWwern point
-    /// let tec = cell.spatial_interpolation(Point::new(0.01, 0.01));
+    /// let tec = cell.spatial_tec_interp(Point::new(0.01, 0.01));
     /// assert_eq!(tec.tecu(), 0.9801);
     /// ```
     pub fn spatial_tec_interp(&self, point: Point<f64>) -> Result<TEC, Error> {
@@ -545,19 +545,19 @@ impl MapCell {
     /// let cell1 = MapCell::from_unitary_tec(t1, one_tec, one_tec, one_tec, one_tec);
     ///
     /// // verify central point value
-    /// let central_tec0 = cell0.spatial_interpolation(center);
+    /// let central_tec0 = cell0.spatial_tec_interp(center);
     /// assert_eq!(central_tec0.tecu(), 1.0);
     ///
     /// // verify central point value
-    /// let central_tec1 = cell1.spatial_interpolation(center);
+    /// let central_tec1 = cell1.spatial_tec_interp(center);
     /// assert_eq!(central_tec1.tecu(), 1.0);
     ///
     /// // spatial + temporal interpolation
     /// // <!> outside sampling interval
-    /// assert!(cell0.temporal_spatial_interpolation(t_nok, center, &cell1).is_none());
+    /// assert!(cell0.temporal_spatial_tec_interp(t_nok, center, &cell1).is_none());
     ///
     /// // spatial + temporal interpolation
-    /// let tec = cell0.temporal_spatial_interpolation(t_ok, center, &cell1).unwrap();
+    /// let tec = cell0.temporal_spatial_tec_interp(t_ok, center, &cell1).unwrap();
     /// assert_eq!(tec.tecu(), 1.0);
     /// ```
     pub fn temporal_spatial_tec_interp(
@@ -629,7 +629,10 @@ mod test {
         assert!(!cell.contains(&Geometry::Point(outside)));
         assert_eq!(center, cell.center());
 
-        let interpolated = cell.spatial_interpolation(center);
+        let interpolated = cell.spatial_tec_interp(center).unwrap_or_else(|e| {
+            panic!("should have been feasible: {}", e);
+        });
+
         assert_eq!(interpolated.tecu(), 1.0);
     }
 
@@ -657,7 +660,14 @@ mod test {
             (0.0, 0.0, 1.0),
         ] {
             let point = Point::new(x_deg, y_deg);
-            let interpolated = cell.spatial_interpolation(point).tecu();
+
+            let interpolated = cell
+                .spatial_tec_interp(point)
+                .unwrap_or_else(|e| {
+                    panic!("should have been feasible! {}", e);
+                })
+                .tecu();
+
             assert_eq!(interpolated, tecu, "failed at (x={}, y={})", x_deg, y_deg);
         }
     }
@@ -700,14 +710,16 @@ mod test {
 
         assert!(
             cell0
-                .temporal_spatial_interpolation(t_nok, center, &cell1)
-                .is_none(),
+                .temporal_spatial_tec_interp(t_nok, center, &cell1)
+                .is_err(),
             "interpolation is temporally incorrect!"
         );
 
         let tec = cell0
-            .temporal_spatial_interpolation(t_ok, center, &cell1)
-            .unwrap();
+            .temporal_spatial_tec_interp(t_ok, center, &cell1)
+            .unwrap_or_else(|e| {
+                panic!("should have been feasible! {}", e);
+            });
 
         assert_eq!(tec.tecu(), 1.0);
     }
