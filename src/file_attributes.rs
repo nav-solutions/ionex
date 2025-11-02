@@ -14,14 +14,14 @@ pub enum Region {
 
     /// Worldwide IONEX map
     #[default]
-    WorldWide,
+    Worldwide,
 }
 
 impl std::fmt::Display for Region {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Regional => write!(f, "{}", 'R'),
-            Self::WorldWide => write!(f, "{}", 'G'),
+            Self::Worldwide => write!(f, "{}", 'G'),
         }
     }
 }
@@ -29,7 +29,7 @@ impl std::fmt::Display for Region {
 /// File production attributes. Used when generating
 /// RINEX data that follows standard naming conventions,
 /// or attached to data parsed from such files.
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FileAttributes {
     /// File agency
     pub agency: String,
@@ -48,6 +48,19 @@ pub struct FileAttributes {
     #[cfg(feature = "flate2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "flate2")))]
     pub gzip_compressed: bool,
+}
+
+impl Default for FileAttributes {
+    fn default() -> Self {
+        Self {
+            doy: 1,
+            year: 2000,
+            agency: "XXX".to_string(), // valid
+            region: Default::default(),
+            #[cfg(feature = "flate2")]
+            gzip_compressed: Default::default(),
+        }
+    }
 }
 
 impl std::fmt::Display for FileAttributes {
@@ -106,7 +119,7 @@ impl std::str::FromStr for FileAttributes {
             .map_err(|_| Error::NonStandardFilename)?;
 
         let region = if filename[3..4].eq("G") {
-            Region::WorldWide
+            Region::Worldwide
         } else {
             Region::Regional
         };
@@ -140,8 +153,8 @@ impl gnss_qc_traits::Merge for FileAttributes {
             self.doy = rhs.doy;
         }
 
-        if self.region == Region::Regional && rhs.region == Region::WorldWide {
-            self.region = Region::WorldWide;
+        if self.region == Region::Regional && rhs.region == Region::Worldwide {
+            self.region = Region::Worldwide;
         }
 
         #[cfg(feature = "flate2")]
@@ -161,9 +174,9 @@ mod test {
     #[test]
     fn standard_filenames() {
         for (filename, agency, year, doy, region) in [
-            ("CKMG0020.22I", "CKM", 2022, 2, Region::WorldWide),
-            ("CKMG0090.21I", "CKM", 2021, 9, Region::WorldWide),
-            ("JPLG0010.17I", "JPL", 2017, 1, Region::WorldWide),
+            ("CKMG0020.22I", "CKM", 2022, 2, Region::Worldwide),
+            ("CKMG0090.21I", "CKM", 2021, 9, Region::Worldwide),
+            ("JPLG0010.17I", "JPL", 2017, 1, Region::Worldwide),
             ("JPLR0010.17I", "JPL", 2017, 1, Region::Regional),
             ("JPLR0010.17I", "JPL", 2017, 1, Region::Regional),
         ] {
@@ -185,9 +198,9 @@ mod test {
     #[test]
     fn gzip_filenames() {
         for (filename, agency, year, doy, region) in [
-            ("CKMG0020.22I.gz", "CKM", 2022, 2, Region::WorldWide),
+            ("CKMG0020.22I.gz", "CKM", 2022, 2, Region::Worldwide),
             ("CKMR0020.22I.gz", "CKM", 2022, 2, Region::Regional),
-            ("JPLG0010.17I.gz", "JPL", 2017, 1, Region::WorldWide),
+            ("JPLG0010.17I.gz", "JPL", 2017, 1, Region::Worldwide),
             ("CKMR0020.22I.gz", "CKM", 2022, 2, Region::Regional),
         ] {
             let attrs = FileAttributes::from_str(filename).unwrap();

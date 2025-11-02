@@ -312,7 +312,11 @@ impl IONEX {
         let year = first_epoch.year();
         let doy = first_epoch.day_of_year().round() as u32;
 
-        let region = Region::WorldWide; // TODO: study the grid specs
+        let region = if self.header.grid.is_worldwide() {
+            Region::Worldwide
+        } else {
+            Region::Regional
+        };
 
         Some(FileAttributes {
             doy,
@@ -505,9 +509,9 @@ impl IONEX {
     ///   * [Self::guess_file_attributes] in close relation: helps generate standardized
     /// filenames for files that did now follow the convention
     ///   * [gnss_qc_traits::Merge]: to combine two files to one another
-    ///   * [Self::to_regional_roi]: to reduce a larger (possibly [Region::GlobalWorldWide] map)
+    ///   * [Self::to_regional_roi]: to reduce a larger (possibly [Region::GlobalWorldwide] map)
     /// to a given ROI
-    ///   * [Self::to_worldwide_map]: to enlarge a possibly [Region::Regional] map to a [Region::GlobalWorldWide] IONEX.
+    ///   * [Self::to_worldwide_map]: to enlarge a possibly [Region::Regional] map to a [Region::GlobalWorldwide] IONEX.
     #[cfg(feature = "flate2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "flate2")))]
     pub fn to_gzip_file<P: AsRef<Path>>(&self, path: P) -> Result<(), FormattingError> {
@@ -543,7 +547,7 @@ impl IONEX {
     /// (as opposed to a local/regional ROI).
     pub fn is_worldwide_map(&self) -> bool {
         if let Some(attributes) = &self.attributes {
-            attributes.region == Region::WorldWide
+            attributes.region == Region::Worldwide
         } else {
             let bounding_rect = self.bounding_rect_degrees();
             bounding_rect.width() == 360.0 && bounding_rect.height() == 175.0
@@ -561,7 +565,7 @@ impl IONEX {
         let mut ionex = self.clone();
 
         if let Some(attributes) = &mut ionex.attributes {
-            attributes.region = Region::WorldWide;
+            attributes.region = Region::Worldwide;
         }
 
         // update grid specs, preserve accuracy
@@ -690,7 +694,7 @@ impl IONEX {
     ///    - < 1.0: downscaling
     ///    - 0.0: invalid
     pub fn spatial_stretching_mut(&mut self, axis: Axis, factor: f64) -> Result<(), Error> {
-        // Stretch header specs
+        // Update the header specs
         match axis {
             Axis::Latitude => {
                 self.header.grid.latitude.stretch_mut(factor)?;
@@ -712,9 +716,36 @@ impl IONEX {
             },
         }
 
-        // TODO: data interpolation
+        // update the attributes
+        match self.attributes {
+            Some(ref mut attributes) => {
+                if self.header.grid.is_worldwide() {
+                    attributes.region = Region::Worldwide;
+                } else {
+                    attributes.region = Region::Regional;
+                }
+            },
+            None => {
+                let mut attributes = FileAttributes::default();
+                if self.header.grid.is_worldwide() {
+                    attributes.region = Region::Worldwide;
+                } else {
+                    attributes.region = Region::Regional;
+                }
+
+                self.attributes = Some(attributes);
+            },
+        }
+
+        // synchronous spatial interpolation
+        for epoch in self.epoch_iter() {}
 
         Ok(())
+    }
+
+    /// Returns an iterator over [Epoch]s in chronological order.
+    pub fn epoch_iter(&self) -> Box<dyn Iterator<Item = Epoch> + '_> {
+        Box::new(self.record.map.keys().map(|k| k.epoch).unique().sorted())
     }
 
     /// Modify the grid spacing (quantization) while preserving the dimensions,
@@ -751,9 +782,63 @@ impl IONEX {
             },
         }
 
-        // TODO: data interpolation
+        // synchronous spatial interpolation
+        for epoch in self.epoch_iter() {}
 
         Ok(())
+    }
+
+    /// Upscale (upsample) or Downscale (downsample) this mutable [IONEX],
+    /// modifying the stretch on the temporal axis.
+    ///
+    /// ## Input
+    /// - factor: a positive finite number
+    ///    - 0.0: is not valid
+    ///    - >1.0: upscaling case. For example, 2.0 means x2 sample rate increase (+100%).
+    ///    - and 1.5 means +50% sample rate increase.
+    ///    - <1.0: downscaling case. For example, 0.5 means /2 sample rate decrease (-50%).
+    pub fn temporal_stretching_mut(&mut self, factor: f64) -> Result<(), Error> {
+        if !factor.is_normal() {
+            return Err(Error::InvalidStretchFactor);
+        }
+
+        // update header
+        self.header.sampling_period = self.header.sampling_period / factor;
+
+        // TODO: (t1, t2) iter
+        Ok(())
+    }
+
+    /// Stretchs this mutable [IONEX] both in temporal and spatial dimensions,
+    /// modifying both dimensions.
+    /// When factor > 1.0 this is an upscaling operation, when factor < 1.0,
+    /// this is a downscaling operation.
+    /// This uses both spatial and temporal interpolation to form valid data points.
+    pub fn temporal_spatial_stretching_mut(
+        &mut self,
+        temporal_factor: f64,
+        axis: Axis,
+        spatial_factor: f64,
+    ) -> Result<(), Error> {
+        self.spatial_stretching_mut(axis, spatial_factor)?;
+        self.temporal_stretching_mut(temporal_factor)?;
+        Ok(())
+    }
+
+    /// Stretchs this [IONEX] into a new [IONEX], both temporally and spatially stretched,
+    /// modifying both dimensions.
+    /// When factor > 1.0 this is an upscaling operation, when factor < 1.0,
+    /// this is a downscaling operation.
+    /// This uses both spatial and temporal interpolation to form valid data points.
+    pub fn temporally_spatially_stretched(
+        &self,
+        temporal_factor: f64,
+        axis: Axis,
+        spatial_factor: f64,
+    ) -> Result<Self, Error> {
+        let mut s = self.clone();
+        s.temporal_spatial_stretching_mut(temporal_factor, axis, spatial_factor)?;
+        Ok(s)
     }
 
     /// Designs a [MapCell] iterator (micro rectangle region made of 4 local points)

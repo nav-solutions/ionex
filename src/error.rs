@@ -95,6 +95,12 @@ pub enum ParsingError {
 pub enum Error {
     #[error("strech factor must be positive finite number")]
     InvalidStretchFactor,
+
+    #[error("both regions do not describe the same spatial ROI")]
+    SpatialMismatch,
+
+    #[error("invalid temporal interpolation instant")]
+    InvalidTemporalPoint,
 }
 
 /// Errors that may rise during Formatting process

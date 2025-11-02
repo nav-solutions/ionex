@@ -1,6 +1,6 @@
 use geo::{Contains, GeodesicArea, Geometry, Point, Rect};
 
-use crate::prelude::{Epoch, TEC};
+use crate::prelude::{Epoch, Error, TEC};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct MapPoint {
@@ -11,7 +11,9 @@ pub struct MapPoint {
     pub tec: TEC,
 }
 
-/// [MapCell] describing a region that we can then interpolate.
+/// [MapCell] describing a 4 corner region that we can interpolate.
+/// In the processing workflow, [MapCell]s are constructed from individual
+/// quanta (smallest ROI) described in a IONEX map.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct MapCell {
     /// Epoch of observation
@@ -114,6 +116,26 @@ impl MapCell {
             south_east,
             south_west,
         }
+    }
+
+    /// Returns true if both [MapCell]s describe the same spatial ROI
+    pub fn spatial_match(&self, rhs: &Self) -> bool {
+        if self.north_east.point == rhs.north_east.point {
+            if self.north_west.point == rhs.north_west.point {
+                if self.south_east.point == rhs.south_east.point {
+                    if self.south_west.point == rhs.south_west.point {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Returns true if both [MapCell]s describe the same point in time
+    pub fn temporal_match(&self, rhs: &Self) -> bool {
+        self.epoch == rhs.epoch
     }
 
     /// Defines a unitary [MapCell] ((0,0), (0,1), (1,0), (1,1)) with associated TEC values,
@@ -326,6 +348,94 @@ impl MapCell {
 
         TEC::from_tecu(tecu)
     }
+
+    // /// Interpolates two [MapCell]s that must describe the same area,
+    // /// but a different point in time.
+    // ///
+    // /// ## Input
+    // /// - epoch: [Epoch] of interpolation, must be temporally in between
+    // /// [Self] and rhs.
+    // pub fn temporally_interpolated(&self, epoch: Epoch, rhs: &Self) -> Result<Self, Error> {
+    //     if !self.spatial_match(rhs) {
+    //         return Err(Error::SpatialMismatch);
+    //     }
+
+    //     let (min_t, max_t) =
+    //     (
+    //         std::cmp::min(self.epoch, rhs.epoch),
+    //         std::cmp::max(self.epoch, rhs.epoch),
+    //     );
+
+    //     if epoch < min_t && epoch > max_t {
+    //         return Err(Error::InvalidTemporalPoint);
+    //     }
+
+    //     let (num_1, num_2, dt) = if self.epoch > rhs.epoch {
+    //         (
+    //             (self.epoch - epoch).to_seconds(),
+    //             (epoch - rhs.epoch).to_seconds(),
+    //             (self.epoch - rhs.epoch).to_seconds(),
+    //         )
+    //     } else {
+    //         (
+    //             (rhs.epoch - epoch).to_seconds(),
+    //             (epoch - self.epoch).to_seconds(),
+    //             (rhs.epoch - self.epoch).to_seconds(),
+    //         )
+    //     };
+
+    //     let (ne_1, ne_2) = if self.epoch > rhs.epoch {
+    //        (self.north_east.tec.tecu(), rhs.north_east.tec.tecu())
+    //     } else {
+    //        (rhs.north_east.tec.tecu(), self.north_east.tec.tecu())
+    //     };
+    //
+    //     let (nw_1, nw_2) = if self.epoch > rhs.epoch {
+    //        (self.north_west.tec.tecu(), rhs.north_west.tec.tecu())
+    //     } else {
+    //        (rhs.north_west.tec.tecu(), self.north_west.tec.tecu())
+    //     };
+
+    //     let (se_1, se_2) = if self.epoch > rhs.epoch {
+    //        (self.south_east.tec.tecu(), rhs.south_east.tec.tecu())
+    //     } else {
+    //        (rhs.south_east.tec.tecu(), self.south_east.tec.tecu())
+    //     };
+    //
+    //     let (sw_1, sw_2) = if self.epoch > rhs.epoch {
+    //        (self.south_west.tec.tecu(), rhs.south_west.tec.tecu())
+    //     } else {
+    //        (rhs.south_west.tec.tecu(), self.south_west.tec.tecu())
+    //     };
+
+    //     Ok(Self {
+    //         epoch,
+    //         north_east: MapPoint {
+    //             point: self.north_east.point,
+    //             tec: TEC::from_tecu(
+    //                 num_1 * ne_1 /dt + num_2 * ne_2 /dt
+    //             ),
+    //         },
+    //         north_west: MapPoint {
+    //             point: self.north_west.point,
+    //             tec: TEC::from_tecu(
+    //                 num_1 * nw_1 /dt + num_2 * nw_2 /dt
+    //             ),
+    //         },
+    //         south_east: MapPoint {
+    //             point: self.south_east.point,
+    //             tec: TEC::from_tecu(
+    //                 num_1 * se_1 /dt + num_2 * se_2 /dt
+    //             ),
+    //         },
+    //         south_west: MapPoint {
+    //             point: self.south_west.point,
+    //             tec: TEC::from_tecu(
+    //                 num_1 * sw_1 /dt + num_2 * sw_2 /dt
+    //             ),
+    //         },
+    //     })
+    // }
 
     /// Spatial + Temporal Interpolation of [TEC] value using planery equation
     /// and rhs [MapCell], which should be closely sampled in time.
