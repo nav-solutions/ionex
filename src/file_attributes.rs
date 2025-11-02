@@ -1,7 +1,6 @@
-//! File production infrastructure.
 use thiserror::Error;
 
-/// File Production identification errors
+/// File info parsing errors
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("filename does not follow naming conventions")]
@@ -10,19 +9,19 @@ pub enum Error {
 
 #[derive(Debug, Copy, Default, Clone, PartialEq)]
 pub enum Region {
-    /// Local IONEX (Regional maps)
+    /// Local/Regional IONEX map (specific ROI).
     Regional,
 
-    /// Global IONEX (Worldwide maps)
+    /// Worldwide IONEX map
     #[default]
-    Global,
+    WorldWide,
 }
 
 impl std::fmt::Display for Region {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Regional => write!(f, "{}", 'R'),
-            Self::Global => write!(f, "{}", 'G'),
+            Self::WorldWide => write!(f, "{}", 'G'),
         }
     }
 }
@@ -31,14 +30,14 @@ impl std::fmt::Display for Region {
 /// RINEX data that follows standard naming conventions,
 /// or attached to data parsed from such files.
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct ProductionAttributes {
-    /// Production agency
+pub struct FileAttributes {
+    /// File agency
     pub agency: String,
 
     /// Year of production
     pub year: u32,
 
-    /// Production Day of Year (DOY).
+    /// File Day of Year (DOY).
     /// We assume past J2000.
     pub doy: u32,
 
@@ -51,7 +50,7 @@ pub struct ProductionAttributes {
     pub gzip_compressed: bool,
 }
 
-impl std::fmt::Display for ProductionAttributes {
+impl std::fmt::Display for FileAttributes {
     #[cfg(feature = "flate2")]
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let len = std::cmp::min(self.agency.len(), 3);
@@ -86,7 +85,7 @@ impl std::fmt::Display for ProductionAttributes {
     }
 }
 
-impl std::str::FromStr for ProductionAttributes {
+impl std::str::FromStr for FileAttributes {
     type Err = Error;
 
     fn from_str(filename: &str) -> Result<Self, Self::Err> {
@@ -107,7 +106,7 @@ impl std::str::FromStr for ProductionAttributes {
             .map_err(|_| Error::NonStandardFilename)?;
 
         let region = if filename[3..4].eq("G") {
-            Region::Global
+            Region::WorldWide
         } else {
             Region::Regional
         };
@@ -128,7 +127,7 @@ impl std::str::FromStr for ProductionAttributes {
 }
 
 #[cfg(feature = "qc")]
-impl gnss_qc_traits::Merge for ProductionAttributes {
+impl gnss_qc_traits::Merge for FileAttributes {
     fn merge(&self, rhs: &Self) -> Result<Self, gnss_qc_traits::MergeError> {
         let mut s = self.clone();
         s.merge_mut(rhs)?;
@@ -141,8 +140,8 @@ impl gnss_qc_traits::Merge for ProductionAttributes {
             self.doy = rhs.doy;
         }
 
-        if self.region == Region::Regional && rhs.region == Region::Global {
-            self.region = Region::Global;
+        if self.region == Region::Regional && rhs.region == Region::WorldWide {
+            self.region = Region::WorldWide;
         }
 
         #[cfg(feature = "flate2")]
@@ -162,15 +161,15 @@ mod test {
     #[test]
     fn standard_filenames() {
         for (filename, agency, year, doy, region) in [
-            ("CKMG0020.22I", "CKM", 2022, 2, Region::Global),
-            ("CKMG0090.21I", "CKM", 2021, 9, Region::Global),
-            ("JPLG0010.17I", "JPL", 2017, 1, Region::Global),
+            ("CKMG0020.22I", "CKM", 2022, 2, Region::WorldWide),
+            ("CKMG0090.21I", "CKM", 2021, 9, Region::WorldWide),
+            ("JPLG0010.17I", "JPL", 2017, 1, Region::WorldWide),
             ("JPLR0010.17I", "JPL", 2017, 1, Region::Regional),
             ("JPLR0010.17I", "JPL", 2017, 1, Region::Regional),
         ] {
             println!("Testing IONEX filename \"{}\"", filename);
 
-            let attrs = ProductionAttributes::from_str(filename).unwrap();
+            let attrs = FileAttributes::from_str(filename).unwrap();
 
             assert_eq!(attrs.agency, agency);
             assert_eq!(attrs.year, year);
@@ -186,12 +185,12 @@ mod test {
     #[test]
     fn gzip_filenames() {
         for (filename, agency, year, doy, region) in [
-            ("CKMG0020.22I.gz", "CKM", 2022, 2, Region::Global),
+            ("CKMG0020.22I.gz", "CKM", 2022, 2, Region::WorldWide),
             ("CKMR0020.22I.gz", "CKM", 2022, 2, Region::Regional),
-            ("JPLG0010.17I.gz", "JPL", 2017, 1, Region::Global),
+            ("JPLG0010.17I.gz", "JPL", 2017, 1, Region::WorldWide),
             ("CKMR0020.22I.gz", "CKM", 2022, 2, Region::Regional),
         ] {
-            let attrs = ProductionAttributes::from_str(filename).unwrap();
+            let attrs = FileAttributes::from_str(filename).unwrap();
 
             assert_eq!(attrs.agency, agency);
             assert_eq!(attrs.year, year);

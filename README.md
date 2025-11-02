@@ -96,14 +96,14 @@ assert_eq!(ionex.header.base_radius_km, 6371.0);
 assert!(ionex.is_2d());
 
 // this file is named according to IGS standards
-let descriptor = ionex.production.clone().unwrap();
+let descriptor = ionex.attributes.clone().unwrap();
 
 // to obtain TEC values at any coordinates, you
 // should use the [MapCell] local region (rectangle quanta)
 // that offers many functions based off the Geo crate.
 
 // Convenient helper to follow standard conventions
-let filename = ionex.standardized_filename();
+let filename = ionex.generate_standardized_filename();
 
 // Dump to file
 let fd = File::create("custom.txt").unwrap();

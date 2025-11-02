@@ -23,12 +23,12 @@ extern crate gnss_rs as gnss;
 
 pub mod bias;
 pub mod error;
+pub mod file_attributes;
 pub mod grid;
 pub mod header;
 pub mod key;
 pub mod linspace;
 pub mod mapf;
-pub mod production;
 pub mod system;
 pub mod tec;
 pub mod version;
@@ -64,9 +64,9 @@ use crate::{
     cell::{MapCell, MapPoint},
     coordinates::QuantizedCoordinates,
     error::{FormattingError, ParsingError},
+    file_attributes::{FileAttributes, Region},
     header::Header,
     key::Key,
-    production::{ProductionAttributes, Region},
     quantized::Quantized,
     record::Record,
     tec::TEC,
@@ -78,13 +78,13 @@ pub mod prelude {
         bias::BiasSource,
         cell::MapCell,
         error::{FormattingError, ParsingError},
+        file_attributes::*,
         grid::Grid,
         header::Header,
         ionosphere::IonosphereParameters,
         key::Key,
         linspace::Linspace,
         mapf::MappingFunction,
-        production::*,
         record::Record,
         system::ReferenceSystem,
         tec::TEC,
@@ -152,7 +152,7 @@ pub(crate) fn fmt_comment(content: &str) -> String {
 ///
 /// use ionex::prelude::*;
 ///
-/// // Parse Global/worldwide map
+/// // Worldwide (so called 'global') IONEX map
 /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
 ///     .unwrap();
 ///
@@ -174,14 +174,14 @@ pub(crate) fn fmt_comment(content: &str) -> String {
 /// assert!(ionex.is_2d());
 ///
 /// // this file is named according to IGS standards
-/// let descriptor = ionex.production.clone().unwrap();
+/// let descriptor = ionex.attributes.clone().unwrap();
 ///
 /// // to obtain TEC values at any coordinates, you
 /// // should use the [MapCell] local region (rectangle quanta)
 /// // that offers many functions based off the Geo crate.
 ///
 /// // Convenient helper to follow standard conventions
-/// let filename = ionex.standardized_filename();
+/// let filename = ionex.generate_standardized_filename();
 ///
 /// // Dump to file
 /// let fd = File::create("custom.txt").unwrap();
@@ -209,9 +209,8 @@ pub struct IONEX {
     /// [Comments] found in file record
     pub comments: Comments,
 
-    /// [ProductionAttributes] resolved for file names that follow
-    /// according to the standards.
-    pub production: Option<ProductionAttributes>,
+    /// [FileAttributes] resolved for file names that follow the IGS conventions.
+    pub attributes: Option<FileAttributes>,
 }
 
 impl IONEX {
@@ -220,7 +219,7 @@ impl IONEX {
         Self {
             header,
             record,
-            production: None,
+            attributes: None,
             comments: Default::default(),
         }
     }
@@ -231,7 +230,7 @@ impl IONEX {
             header,
             record: self.record.clone(),
             comments: self.comments.clone(),
-            production: self.production.clone(),
+            attributes: self.attributes.clone(),
         }
     }
 
@@ -246,7 +245,7 @@ impl IONEX {
             record,
             header: self.header.clone(),
             comments: self.comments.clone(),
-            production: self.production.clone(),
+            attributes: self.attributes.clone(),
         }
     }
 
@@ -272,21 +271,21 @@ impl IONEX {
 
     /// Returns a file name that would describe [Self] according to the
     /// standards.
-    pub fn standardized_filename(&self) -> String {
-        let (agency, region, year, doy) = if let Some(production) = &self.production {
+    pub fn generate_standardized_filename(&self) -> String {
+        let (agency, region, year, doy) = if let Some(attributes) = &self.attributes {
             (
-                production.agency.clone(),
-                production.region,
-                production.year - 2000,
-                production.doy,
+                attributes.agency.clone(),
+                attributes.region,
+                attributes.year - 2000,
+                attributes.doy,
             )
         } else {
             ("XXX".to_string(), Region::default(), 0, 0)
         };
 
-        let extension = if let Some(production) = &self.production {
+        let extension = if let Some(attributes) = &self.attributes {
             #[cfg(feature = "flate2")]
-            if production.gzip_compressed {
+            if attributes.gzip_compressed {
                 ".gz"
             } else {
                 ""
@@ -298,12 +297,13 @@ impl IONEX {
         format!("{}{}{:03}0.{:02}I{}", agency, region, doy, year, extension)
     }
 
-    /// Guesses File [ProductionAttributes] from actual record content.
-    /// This is useful to generate a standardized file name, from good data content
-    /// parsed from files that do not follow the standard naming conventions.
-    /// The agency is only determined by the file name so you should provide one,
-    /// and it must be a at least 3 letter code.
-    pub fn guess_production_attributes(&self, agency: &str) -> Option<ProductionAttributes> {
+    /// Guesses [FileAttributes] from actual dataset. This is particularly useful
+    /// to generate a standardized file name, especially when arriving from data that
+    /// did not follow the conventions.
+    /// The name of the production agency (data provider) is only determined by the [FileAttributes]
+    /// itself, so we have no means to generate correct one, so we need you to define it right here.
+    /// The production agency should be at least a 3 letter code, for example: "IGS".
+    pub fn guess_file_attributes(&self, agency: &str) -> Option<FileAttributes> {
         if agency.len() < 3 {
             return None;
         }
@@ -312,16 +312,16 @@ impl IONEX {
         let year = first_epoch.year();
         let doy = first_epoch.day_of_year().round() as u32;
 
-        let region = Region::Global; // TODO: study the grid specs
+        let region = Region::WorldWide; // TODO: study the grid specs
 
-        Some(ProductionAttributes {
+        Some(FileAttributes {
             doy,
             region,
             year: year as u32,
             agency: agency.to_string(),
 
             #[cfg(feature = "flate2")]
-            gzip_compressed: if let Some(attributes) = &self.production {
+            gzip_compressed: if let Some(attributes) = &self.attributes {
                 attributes.gzip_compressed
             } else {
                 false
@@ -344,7 +344,7 @@ impl IONEX {
             header,
             record,
             comments,
-            production: Default::default(),
+            attributes: Default::default(),
         })
     }
 
@@ -371,12 +371,12 @@ impl IONEX {
     /// See [Self::from_gzip_file] for seamless Gzip support.
     ///
     /// If file name follows standard naming conventions, then internal definitions
-    /// will truly be complete. Otherwise [ProductionAttributes] cannot be fully determined.
+    /// will truly be complete. Otherwise [FileAttributes] cannot be fully determined.
     /// If you want or need to you can either
     ///  1. define it yourself with further customization
-    ///  2. use the smart guesser (after parsing): [Self::guess_production_attributes]
+    ///  2. use the smart guesser (after parsing): [Self::guess_attributes_attributes]
     ///
-    /// This is typically needed in data production contexts.
+    /// This is typically needed in data attributes contexts.
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<IONEX, ParsingError> {
         let path = path.as_ref();
 
@@ -384,7 +384,7 @@ impl IONEX {
         let file_attributes = match path.file_name() {
             Some(filename) => {
                 let filename = filename.to_string_lossy().to_string();
-                if let Ok(prod) = ProductionAttributes::from_str(&filename) {
+                if let Ok(prod) = FileAttributes::from_str(&filename) {
                     Some(prod)
                 } else {
                     None
@@ -397,7 +397,7 @@ impl IONEX {
         let mut reader = BufReader::new(fd);
 
         let mut ionex = Self::parse(&mut reader)?;
-        ionex.production = file_attributes;
+        ionex.attributes = file_attributes;
 
         Ok(ionex)
     }
@@ -416,9 +416,9 @@ impl IONEX {
     /// assert!(ionex.to_file("test.txt").is_ok());
     /// ```
     ///
-    /// Other useful links are in data production contexts:
+    /// Other useful links are in data attributes contexts:
     ///   * [Self::standard_filename] to generate a standardized filename
-    ///   * [Self::guess_production_attributes] helps generate standardized filenames for
+    ///   * [Self::guess_attributes_attributes] helps generate standardized filenames for
     ///     files that do not follow naming conventions
     pub fn to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), FormattingError> {
         let fd = File::create(path)?;
@@ -466,7 +466,7 @@ impl IONEX {
         let file_attributes = match path.file_name() {
             Some(filename) => {
                 let filename = filename.to_string_lossy().to_string();
-                if let Ok(prod) = ProductionAttributes::from_str(&filename) {
+                if let Ok(prod) = FileAttributes::from_str(&filename) {
                     Some(prod)
                 } else {
                     None
@@ -481,14 +481,15 @@ impl IONEX {
         let mut reader = BufReader::new(reader);
 
         let mut ionex = Self::parse(&mut reader)?;
-        ionex.production = file_attributes;
+        ionex.attributes = file_attributes;
 
         Ok(ionex)
     }
 
     /// Dumps and gzip encodes [IONEX] into writable local file,
     /// using efficient buffered formatting.
-    /// This is the mirror operation of [Self::from_gzip_file].
+    ///
+    /// This operation is [Self::from_gzip_file] mirror operation.
     /// ```
     /// // Read a IONEX and dump it without any modifications
     /// use ionex::prelude::*;
@@ -499,10 +500,14 @@ impl IONEX {
     /// assert!(ionex.to_gzip_file("test.txt.gz").is_ok());
     /// ```
     ///
-    /// Other useful links are in data production contexts:
-    ///   * [Self::standard_filename] to generate a standardized filename
-    ///   * [Self::guess_production_attributes] helps generate standardized filenames for
-    ///     files that do not follow naming conventions
+    /// Other useful methods are:
+    ///   * [Self::generate_standardized_filename]: to generate a standardize file name
+    ///   * [Self::guess_file_attributes] in close relation: helps generate standardized
+    /// filenames for files that did now follow the convention
+    ///   * [gnss_qc_traits::Merge]: to combine two files to one another
+    ///   * [Self::to_regional_roi]: to reduce a larger (possibly [Region::GlobalWorldWide] map)
+    /// to a given ROI
+    ///   * [Self::to_worldwide_map]: to enlarge a possibly [Region::Regional] map to a [Region::GlobalWorldWide] IONEX.
     #[cfg(feature = "flate2")]
     #[cfg_attr(docsrs, doc(cfg(feature = "flate2")))]
     pub fn to_gzip_file<P: AsRef<Path>>(&self, path: P) -> Result<(), FormattingError> {
@@ -539,8 +544,8 @@ impl IONEX {
     pub fn to_worldwide_ionex(&self) -> IONEX {
         let mut ionex = self.clone();
 
-        if let Some(production) = &mut ionex.production {
-            production.region = Region::Global;
+        if let Some(attributes) = &mut ionex.attributes {
+            attributes.region = Region::WorldWide;
         }
 
         // update grid specs, preserve accuracy
@@ -554,23 +559,34 @@ impl IONEX {
         ionex
     }
 
+    /// Returns true if this [IONEX] is a Worldwide map
+    /// (as opposed to a local/regional ROI).
+    pub fn is_worldwide_map(&self) -> bool {
+        if let Some(attributes) = &self.attributes {
+            attributes.region == Region::WorldWide
+        } else {
+            let bounding_rect = self.map_borders_degrees();
+            bounding_rect.width() == 360.0 && bounding_rect.height() == 175.0
+        }
+    }
+
     /// Converts this Global/Worldwide [IONEX] to Regional [IONEX]
     /// delimited by (possibly complex) bounding geometry, for which [BoundingRect] needs
     /// to return correctly. Each boundary coordinates must also be expressed in degrees.  
     /// NB: work in progress, not validated yet.
-    pub fn to_regional_ionex(&self, region: Polygon) -> Option<IONEX> {
+    pub fn to_regional_roi(&self, roi: Polygon) -> Option<IONEX> {
         let mut ionex = IONEX::default();
 
-        let bounding_rect = region.bounding_rect()?;
+        let bounding_rect = roi.bounding_rect()?;
 
         let (min_long, min_lat) = (bounding_rect.min().x, bounding_rect.min().y);
         let (max_long, max_lat) = (bounding_rect.max().x, bounding_rect.max().y);
 
         // copy attributes
-        ionex.production = self.production.clone();
+        ionex.attributes = self.attributes.clone();
 
-        if let Some(production) = &mut ionex.production {
-            production.region = Region::Regional;
+        if let Some(attributes) = &mut ionex.attributes {
+            attributes.region = Region::Regional;
         }
 
         // copy & rework header
@@ -581,12 +597,12 @@ impl IONEX {
         ionex.header.grid.longitude.start = min_long;
         ionex.header.grid.longitude.end = max_long;
 
-        let region = Geometry::Polygon(region);
+        let roi = Geometry::Polygon(roi);
 
         // restrict area
         let cells = self
             .map_cell_iter()
-            .filter(|cell| cell.contains(&region))
+            .filter(|cell| cell.contains(&roi))
             .collect::<Vec<_>>();
 
         ionex.record = Record::from_map_cells(
@@ -865,15 +881,15 @@ impl gnss_qc_traits::Merge for IONEX {
         self.header.merge_mut(&rhs.header)?;
         self.record.merge_mut(&rhs.record)?;
 
-        match self.production {
+        match self.attributes {
             Some(ref mut prods) => {
-                if let Some(rhs) = &rhs.production {
+                if let Some(rhs) = &rhs.attributes {
                     prods.merge_mut(rhs)?;
                 }
             },
             None => {
-                if let Some(rhs) = &rhs.production {
-                    self.production = Some(rhs.clone());
+                if let Some(rhs) = &rhs.attributes {
+                    self.attributes = Some(rhs.clone());
                 }
             },
         }
@@ -940,7 +956,7 @@ mod test {
 
         let roi = Rect::new(coord!(x: -180.0, y: -85.0), coord!(x: 180.0, y: -82.5));
 
-        let regional = ionex.to_regional_ionex(roi.into()).unwrap();
+        let regional = ionex.to_regional_roi(roi.into()).unwrap();
 
         // dump
         regional.to_file("region.txt").unwrap();
