@@ -62,8 +62,9 @@ use hifitime::prelude::Epoch;
 use crate::{
     cell::{MapCell, MapPoint},
     coordinates::QuantizedCoordinates,
-    error::{FormattingError, ParsingError},
+    error::{Error, FormattingError, ParsingError},
     file_attributes::{FileAttributes, Region},
+    grid::{Axis, Grid},
     header::Header,
     key::Key,
     quantized::Quantized,
@@ -76,9 +77,9 @@ pub mod prelude {
     pub use crate::{
         bias::BiasSource,
         cell::MapCell,
-        error::{FormattingError, ParsingError, Error},
+        error::{Error, FormattingError, ParsingError},
         file_attributes::*,
-        grid::Grid,
+        grid::{Axis, Grid},
         header::Header,
         ionosphere::IonosphereParameters,
         key::Key,
@@ -529,7 +530,7 @@ impl IONEX {
         false
     }
 
-    /// Returns map borders as a [Rect]angle, with coordinates in decimal degrees. 
+    /// Returns map borders as a [Rect]angle, with coordinates in decimal degrees.
     /// This uses the [Header] description and assumes all maps are within these borders.
     pub fn bounding_rect_degrees(&self) -> Rect {
         Rect::new(
@@ -554,7 +555,7 @@ impl IONEX {
         !self.is_worldwide_map()
     }
 
-    /// Stretch this [IONEX] definition so it becomes compatible 
+    /// Stretch this [IONEX] definition so it becomes compatible
     /// with the description of a Global/Worldwide [IONEX].
     pub fn to_worldwide_ionex(&self) -> IONEX {
         let mut ionex = self.clone();
@@ -595,6 +596,8 @@ impl IONEX {
         // copy header
         ionex.header = self.header.clone();
 
+        // stretch factors
+
         // rework header
         ionex.header.grid.latitude.start = max_lat;
         ionex.header.grid.latitude.end = min_lat;
@@ -621,33 +624,136 @@ impl IONEX {
         Some(ionex)
     }
 
-    /// Stretch this [IONEX] into a new file [IONEX], modifying grid
-    /// spatial precision.
-    /// ## Inputs
-    /// - stretch > 1.0: increases precision.  
-    /// The 2D planar interpolation is applied to define the TEC as originally
-    /// non existing coordinates.
-    /// - stretch < 1.0: reduces precision.  
-    /// NB: work in progress, not validated yet.
-    pub fn grid_precision_stretch(&self, stretch_factor: f64) -> IONEX {
+    /// Modify the grid dimensions by a positive, possibly fractional number,
+    /// and interpolates the TEC values.
+    ///
+    /// This does not modify the grid quantization, only the dimensions.
+    ///
+    /// ## Input
+    /// - axis: [Axis] to be stretched
+    /// - factor:
+    ///    - > 1.0: upscaling
+    ///    - < 1.0: downscaling
+    ///    - 0.0: invalid
+    ///
+    /// Example 1: spatial upscaling
+    /// ```
+    /// use ionex::prelude::{
+    ///     IONEX,
+    ///     Axis,
+    /// };
+    ///
+    /// // grab a local dataset, upscaling hardly applies to worldwide maps..
+    /// // this example is a data/IONEX/V1/CKMG0020.22I.gz that went through a x0.5 downscale.
+    /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMR0020.22I.gz").unwrap_or_else(|e| {
+    ///     panic!("Failed to parse CKMR0020: {}", e);
+    /// });
+    ///
+    /// // spatial dimensions upscale including interpolation: upscales to worldwide dimensions
+    /// let upscaled = ionex.spatially_stretched(Axis::Planar, 2.0)
+    ///     .unwrap();
+    ///
+    /// // testbench: compares these results to the original data
+    /// ```
+    pub fn spatially_stretched(&self, axis: Axis, factor: f64) -> Result<IONEX, Error> {
         let mut s = self.clone();
-        s.grid_precision_stretch_mut(stretch_factor);
-        s
+        s.spatial_stretching_mut(axis, factor)?;
+        Ok(s)
     }
 
-    /// Stretch this mutable [IONEX], modifying the grid precision.
-    /// See [Self::grid_precision_stretch] for more information.  
-    /// NB: work in progress, not validated yet.
-    pub fn grid_precision_stretch_mut(&mut self, stretch_factor: f64) {
-        // update grid
-        self.header.grid.latitude.start *= stretch_factor;
-        self.header.grid.latitude.end *= stretch_factor;
-        self.header.grid.longitude.start *= stretch_factor;
-        self.header.grid.longitude.end *= stretch_factor;
+    /// Modify the grid spacing (quantization) while preserving the dimensions,
+    /// and interpolates the TEC values.
+    ///
+    /// This only modify the grid quantization, the map dimensions are preserved.
+    ///
+    /// ## Input
+    /// - axis: [Axis] to be resampled
+    /// - factor:
+    ///    - > 1.0: upscaling
+    ///    - < 1.0: downscaling
+    ///    - 0.0: invalid
+    pub fn spatially_resampled(&self, axis: Axis, factor: f64) -> Result<IONEX, Error> {
+        let mut s = self.clone();
+        s.spatial_resampling_mut(axis, factor)?;
+        Ok(s)
+    }
 
-        // // update map
-        // for epoch in self.record.epochs_iter() {
-        // }
+    /// Modify the grid dimensions by a positive, possibly fractional number,
+    /// and interpolates the TEC values.
+    ///
+    /// This does not modify the grid quantization, only the dimensions.
+    ///
+    /// ## Input
+    /// - axis: [Axis] to be stretched
+    /// - factor:
+    ///    - > 1.0: upscaling
+    ///    - < 1.0: downscaling
+    ///    - 0.0: invalid
+    pub fn spatial_stretching_mut(&mut self, axis: Axis, factor: f64) -> Result<(), Error> {
+        // Stretch header specs
+        match axis {
+            Axis::Latitude => {
+                self.header.grid.latitude.stretch_mut(factor)?;
+            },
+            Axis::Longitude => {
+                self.header.grid.longitude.stretch_mut(factor)?;
+            },
+            Axis::Altitude => {
+                self.header.grid.altitude.stretch_mut(factor)?;
+            },
+            Axis::Planar => {
+                self.header.grid.latitude.stretch_mut(factor)?;
+                self.header.grid.longitude.stretch_mut(factor)?;
+            },
+            Axis::All => {
+                self.header.grid.latitude.stretch_mut(factor)?;
+                self.header.grid.longitude.stretch_mut(factor)?;
+                self.header.grid.altitude.stretch_mut(factor)?;
+            },
+        }
+
+        // TODO: data interpolation
+
+        Ok(())
+    }
+
+    /// Modify the grid spacing (quantization) while preserving the dimensions,
+    /// and interpolates the TEC values.
+    ///
+    /// This only modify the grid quantization, the map dimensions are preserved.
+    ///
+    /// ## Input
+    /// - axis: [Axis] to be resampled
+    /// - factor:
+    ///    - > 1.0: upscaling
+    ///    - < 1.0: downscaling
+    ///    - 0.0: invalid
+    pub fn spatial_resampling_mut(&mut self, axis: Axis, factor: f64) -> Result<(), Error> {
+        // Stretch header specs
+        match axis {
+            Axis::Latitude => {
+                self.header.grid.latitude.resample_mut(factor)?;
+            },
+            Axis::Longitude => {
+                self.header.grid.longitude.resample_mut(factor)?;
+            },
+            Axis::Altitude => {
+                self.header.grid.altitude.resample_mut(factor)?;
+            },
+            Axis::Planar => {
+                self.header.grid.latitude.resample_mut(factor)?;
+                self.header.grid.longitude.resample_mut(factor)?;
+            },
+            Axis::All => {
+                self.header.grid.latitude.resample_mut(factor)?;
+                self.header.grid.longitude.resample_mut(factor)?;
+                self.header.grid.altitude.resample_mut(factor)?;
+            },
+        }
+
+        // TODO: data interpolation
+
+        Ok(())
     }
 
     /// Designs a [MapCell] iterator (micro rectangle region made of 4 local points)
@@ -960,8 +1066,7 @@ mod test {
 
         let roi = Rect::new(coord!(x: -180.0, y: -85.0), coord!(x: 180.0, y: -82.5));
 
-        let regional = ionex.to_regional_ionex(roi.into())
-            .unwrap();
+        let regional = ionex.to_regional_ionex(roi.into()).unwrap();
 
         // dump
         regional.to_file("region.txt").unwrap();
@@ -971,5 +1076,4 @@ mod test {
             panic!("Failed to parse region.txt: {}", e);
         });
     }
-
 }

@@ -3,6 +3,25 @@ use crate::{error::ParsingError, linspace::Linspace};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Axis {
+    /// Latitude axis (y)
+    Latitude,
+
+    /// Longitude axis (x)
+    Longitude,
+
+    /// Altitude axis (z), only meaningful in true 3D IONEX
+    Altitude,
+
+    /// Latitude + Longitude axes plane
+    Planar,
+
+    /// All (Latitude + Longitude plane, and z-axis when feasible)
+    All,
+}
+
 /// [Grid] used to describe latitude, longitude
 /// and altitude linar spaces, defining the entire map.
 #[derive(Debug, Copy, Clone, Default, PartialEq, PartialOrd)]

@@ -5,6 +5,7 @@ mod filename;
 mod parsing;
 mod qc;
 mod roi;
+mod stretching;
 
 mod v1;
 
