@@ -99,8 +99,11 @@ pub enum Error {
     #[error("undefined ROI exterior boundaries")]
     UndefinedBoundaries,
 
-    #[error("provided coordinates are outside boundaries")]
-    OutsideBoundaries,
+    #[error("coordinates are outside spatial boundaries")]
+    OutsideSpatialBoundaries,
+
+    #[error("temporal coordinates outside this temporal axis")]
+    OutsideTemporalBoundaries,
 
     #[error("both regions do not describe the same spatial ROI")]
     SpatialMismatch,

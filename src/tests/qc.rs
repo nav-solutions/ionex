@@ -23,6 +23,8 @@ fn v1_self_merge() {
         panic!("self::merge(self) should be feasible! {}", e);
     });
 
+    assert!(merged.is_merged(), "merged file not declared as merged!");
+
     // reciprocal
     let fd = File::create("merged.txt").unwrap();
     let mut writer = BufWriter::new(fd);
@@ -32,11 +34,18 @@ fn v1_self_merge() {
     });
 
     // parse back
-    let parsed = IONEX::from_file("merged.txt").unwrap_or_else(|e| {
+    let mut parsed = IONEX::from_file("merged.txt").unwrap_or_else(|e| {
         panic!("failed to parse back CKMG V1: {}", e);
     });
 
-    // full reciprocity
+    assert!(parsed.is_merged(), "merged file not declared as merged!");
+
+    // remove special comment and run strict equality test
+    parsed
+        .header
+        .comments
+        .retain(|comment| !comment.eq("FILE MERGE"));
+
     generic_comparison(&parsed, &ionex);
 }
 
@@ -55,7 +64,19 @@ fn v1_files_merge() {
         panic!("failed to merge both files: {}", e);
     });
 
-    // verifications
+    // testbench
+    assert!(merged.is_merged(), "merged file not declared as merged!");
+    assert_eq!(
+        merged.header.epoch_of_first_map.to_string(),
+        "2021-01-09T00:00:00 UTC"
+    );
+    assert_eq!(
+        merged.header.epoch_of_last_map.to_string(),
+        "2022-01-03T00:00:00 UTC"
+    );
+    assert!(merged.is_worldwide_map());
+
+    // Dump to file
     let fd = File::create("merged.txt").unwrap();
     let mut writer = BufWriter::new(fd);
 
@@ -64,9 +85,19 @@ fn v1_files_merge() {
     });
 
     // parse back
-    let parsed = IONEX::from_file("ckmg-v1.txt").unwrap_or_else(|e| {
+    let parsed = IONEX::from_file("merged.txt").unwrap_or_else(|e| {
         panic!("failed to parse back CKMG V1: {}", e);
     });
 
-    // TODO
+    // testbench
+    assert!(parsed.is_merged(), "merged file not declared as merged!");
+    assert_eq!(
+        parsed.header.epoch_of_first_map.to_string(),
+        "2021-01-09T00:00:00 UTC"
+    );
+    assert_eq!(
+        parsed.header.epoch_of_last_map.to_string(),
+        "2022-01-03T00:00:00 UTC"
+    );
+    assert!(parsed.is_worldwide_map());
 }

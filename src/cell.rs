@@ -271,6 +271,8 @@ impl MapCell {
     }
 
     /// Returns borders of this [MapCell] expressed as a [Rect]angle, in decimal degrees.
+    /// This is a direct conversion of this [MapCell] in terms of spatial dimensions,
+    /// discarding the associated TEC values.
     pub fn bounding_rect_degrees(&self) -> Rect {
         Rect::new(self.south_west.point, self.north_east.point)
     }
@@ -388,7 +390,7 @@ impl MapCell {
     /// ```
     pub fn spatial_tec_interp(&self, point: Point<f64>) -> Result<TEC, Error> {
         if !self.contains(&Geometry::Point(point)) {
-            return Err(Error::OutsideBoundaries);
+            return Err(Error::OutsideSpatialBoundaries);
         }
 
         let (latitude_span, longitude_span) = self.latitude_longitude_span_degrees();

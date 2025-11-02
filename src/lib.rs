@@ -52,7 +52,7 @@ use std::{
 
 use itertools::Itertools;
 
-use geo::{coord, BoundingRect, Geometry, LineString, Point, Polygon, Rect};
+use geo::{coord, BoundingRect, Contains, Geometry, LineString, Point, Polygon, Rect};
 
 #[cfg(feature = "flate2")]
 use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
@@ -939,16 +939,42 @@ impl IONEX {
     /// Prefer [Self::unitary_roi_at] in this case, to not bother designing the unit [Rect].
     /// - or the closest fitting [MapCell] (wrapping boundaries) that we could fit
     pub fn roi_at(&self, epoch: Epoch, roi: Rect) -> Result<MapCell, Error> {
-        if epoch < self.header.epoch_of_first_map {
-            return Err(Error::TemporalMismatch);
+        // determine whether this is within the temporal axis
+        if epoch < self.header.epoch_of_first_map || epoch > self.header.epoch_of_last_map {
+            return Err(Error::OutsideTemporalBoundaries);
         }
 
-        if epoch > self.header.epoch_of_last_map {
-            return Err(Error::TemporalMismatch);
+        // determine this is within the map
+        if !self.bounding_rect_degrees().contains(&Geometry::Rect(roi)) {
+            return Err(Error::OutsideSpatialBoundaries);
         }
 
-        // for each corner of the ROI, determine the best suited
-        // map cell for spatial interpolation
+        // determine whether we need temporal interpolation or not
+        let mut needs_temporal_interp = true;
+        let mut t = self.header.epoch_of_first_map;
+
+        while t < self.header.epoch_of_last_map {
+            if t == epoch {
+                needs_temporal_interp = false;
+                break;
+            }
+
+            t += self.header.sampling_period;
+        }
+
+        // we don't need spatial interpolation if the ROI height and width
+        // are a perfect multiple of the grid dimensions
+        let (width, height) = (roi.width(), roi.height());
+
+        let mut needs_lat_interpolation =
+            height.rem_euclid(self.header.grid.latitude.spacing) == 0.0;
+        let mut needs_long_interpolation =
+            width.rem_euclid(self.header.grid.longitude.spacing) == 0.0;
+
+        let needs_spatial_interpolation = needs_lat_interpolation || needs_long_interpolation;
+        if needs_spatial_interpolation {
+            panic!("not supported yet");
+        }
 
         // TODO
         Err(Error::TemporalMismatch)
@@ -971,8 +997,63 @@ impl IONEX {
         coordinates: Point<f64>,
         card: Cardinal,
     ) -> Result<MapCell, Error> {
-        // TODO
-        Err(Error::TemporalMismatch)
+        // builds the unitary ROI (as Rect) matching those coordinates and cardinal
+        let (lat_pairs, long_pairs) = (
+            self.header.grid.latitude.quantize().tuple_windows(),
+            self.header.grid.longitude.quantize().tuple_windows(),
+        );
+
+        let (lat_spacing, long_spacing) = (
+            self.header.grid.latitude.spacing,
+            self.header.grid.longitude.spacing,
+        );
+
+        for (lat1, lat2) in lat_pairs {
+            for (long1, long2) in long_pairs.clone() {
+                let (lat1, lat2, long1, long2) = (
+                    lat1.real_value(),
+                    lat2.real_value(),
+                    long1.real_value(),
+                    long2.real_value(),
+                );
+                match card {
+                    Cardinal::NorthEast => {
+                        if lat1 == coordinates.y() && long1 == coordinates.x() {
+                            let roi =
+                                Rect::new(coord!(x: long1, y: lat1), coord!(x: long2, y: lat2));
+
+                            return self.roi_at(epoch, roi);
+                        }
+                    },
+                    Cardinal::SouthEast => {
+                        if lat1 == coordinates.y() && long1 == coordinates.x() {
+                            let roi =
+                                Rect::new(coord!(x: long1, y: lat1), coord!(x: long2, y: lat2));
+
+                            return self.roi_at(epoch, roi);
+                        }
+                    },
+                    Cardinal::SouthWest => {
+                        if lat1 == coordinates.y() && long1 == coordinates.x() {
+                            let roi =
+                                Rect::new(coord!(x: long1, y: lat1), coord!(x: long2, y: lat2));
+
+                            return self.roi_at(epoch, roi);
+                        }
+                    },
+                    Cardinal::NorthWest => {
+                        if lat1 == coordinates.y() && long1 == coordinates.x() {
+                            let roi =
+                                Rect::new(coord!(x: long1, y: lat1), coord!(x: long2, y: lat2));
+
+                            return self.roi_at(epoch, roi);
+                        }
+                    },
+                }
+            }
+        }
+
+        Err(Error::OutsideSpatialBoundaries)
     }
 
     /// Obtain the best suited [MapCell] spatially wrapping this Geometry that contains following [Geometry].

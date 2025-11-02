@@ -85,6 +85,13 @@ impl Merge for Header {
             }
         }
 
+        // insert special comment
+        let merge_comment = "FILE MERGE".to_string();
+
+        if !self.comments.contains(&merge_comment) {
+            self.comments.push(merge_comment.clone());
+        }
+
         Ok(())
     }
 }
