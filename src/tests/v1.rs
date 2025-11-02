@@ -220,7 +220,7 @@ fn parse_ckmg0020() {
     assert_eq!(ionex.header.exponent, -1);
 
     assert_eq!(
-        ionex.map_borders_degrees(),
+        ionex.bounding_rect_degrees(),
         Rect::new(coord!(x: -180.0, y: -87.5), coord!(x: 180.0, y: 87.5))
     );
 

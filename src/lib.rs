@@ -76,7 +76,7 @@ pub mod prelude {
     pub use crate::{
         bias::BiasSource,
         cell::MapCell,
-        error::{FormattingError, ParsingError},
+        error::{FormattingError, ParsingError, Error},
         file_attributes::*,
         grid::Grid,
         header::Header,
@@ -529,17 +529,33 @@ impl IONEX {
         false
     }
 
-    /// Returns map borders as [Rect]angle. This uses
-    /// the [Header] description and assumes all maps are within these borders.
-    pub fn map_borders_degrees(&self) -> Rect {
+    /// Returns map borders as a [Rect]angle, with coordinates in decimal degrees. 
+    /// This uses the [Header] description and assumes all maps are within these borders.
+    pub fn bounding_rect_degrees(&self) -> Rect {
         Rect::new(
             coord!( x: self.header.grid.longitude.start, y: self.header.grid.latitude.start ),
             coord!( x: self.header.grid.longitude.end, y: self.header.grid.latitude.end),
         )
     }
 
-    /// Stretch this Regional [IONEX] to a Global/Worldwide [IONEX].  
-    /// NB: work in progress, not validated yet.
+    /// Returns true if this [IONEX] is a Worldwide map
+    /// (as opposed to a local/regional ROI).
+    pub fn is_worldwide_map(&self) -> bool {
+        if let Some(attributes) = &self.attributes {
+            attributes.region == Region::WorldWide
+        } else {
+            let bounding_rect = self.bounding_rect_degrees();
+            bounding_rect.width() == 360.0 && bounding_rect.height() == 175.0
+        }
+    }
+
+    /// Returns true if this [IONEX] is not a Worldwide map but a regional/local ROI.
+    pub fn is_regional_map(&self) -> bool {
+        !self.is_worldwide_map()
+    }
+
+    /// Stretch this [IONEX] definition so it becomes compatible 
+    /// with the description of a Global/Worldwide [IONEX].
     pub fn to_worldwide_ionex(&self) -> IONEX {
         let mut ionex = self.clone();
 
@@ -558,22 +574,10 @@ impl IONEX {
         ionex
     }
 
-    /// Returns true if this [IONEX] is a Worldwide map
-    /// (as opposed to a local/regional ROI).
-    pub fn is_worldwide_map(&self) -> bool {
-        if let Some(attributes) = &self.attributes {
-            attributes.region == Region::WorldWide
-        } else {
-            let bounding_rect = self.map_borders_degrees();
-            bounding_rect.width() == 360.0 && bounding_rect.height() == 175.0
-        }
-    }
-
-    /// Converts this Global/Worldwide [IONEX] to Regional [IONEX]
-    /// delimited by (possibly complex) bounding geometry, for which [BoundingRect] needs
-    /// to return correctly. Each boundary coordinates must also be expressed in degrees.  
-    /// NB: work in progress, not validated yet.
-    pub fn to_regional_roi(&self, roi: Polygon) -> Option<IONEX> {
+    /// Reduce this [IONEX] definition so it is reduced to a regional ROI,
+    /// described by a complex [Polygon] in decimal degrees.
+    /// [Polygon::bounding_rect] must be defined for this operation to work correctly.
+    pub fn to_regional_ionex(&self, roi: Polygon) -> Option<IONEX> {
         let mut ionex = IONEX::default();
 
         let bounding_rect = roi.bounding_rect()?;
@@ -588,9 +592,10 @@ impl IONEX {
             attributes.region = Region::Regional;
         }
 
-        // copy & rework header
+        // copy header
         ionex.header = self.header.clone();
 
+        // rework header
         ionex.header.grid.latitude.start = max_lat;
         ionex.header.grid.latitude.end = min_lat;
         ionex.header.grid.longitude.start = min_long;
@@ -773,7 +778,7 @@ impl IONEX {
     /// ]);
     ///
     /// // you can double check that
-    /// assert!(ionex.map_borders_degrees().contains(&roi_ddeg));
+    /// assert!(ionex.bounding_rect_degrees().contains(&roi_ddeg));
     ///
     /// // Epoch must exist in the record
     /// let noon = Epoch::from_str("2022-01-02T12:00:00 UTC")
@@ -955,7 +960,8 @@ mod test {
 
         let roi = Rect::new(coord!(x: -180.0, y: -85.0), coord!(x: 180.0, y: -82.5));
 
-        let regional = ionex.to_regional_roi(roi.into()).unwrap();
+        let regional = ionex.to_regional_ionex(roi.into())
+            .unwrap();
 
         // dump
         regional.to_file("region.txt").unwrap();
@@ -965,4 +971,5 @@ mod test {
             panic!("Failed to parse region.txt: {}", e);
         });
     }
+
 }

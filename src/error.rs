@@ -91,6 +91,12 @@ pub enum ParsingError {
     ExponentScaling,
 }
 
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("strech factor must be positive")]
+    NegativeStretchFactor,
+}
+
 /// Errors that may rise during Formatting process
 #[derive(Error, Debug)]
 pub enum FormattingError {
