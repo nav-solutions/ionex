@@ -60,7 +60,7 @@ use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 use hifitime::prelude::Epoch;
 
 use crate::{
-    cell::{MapCell, MapPoint},
+    cell::{Cardinal, MapCell, MapPoint},
     coordinates::QuantizedCoordinates,
     error::{Error, FormattingError, ParsingError},
     file_attributes::{FileAttributes, Region},
@@ -76,7 +76,7 @@ pub mod prelude {
     // export
     pub use crate::{
         bias::BiasSource,
-        cell::MapCell,
+        cell::{Cardinal, MapCell},
         error::{Error, FormattingError, ParsingError},
         file_attributes::*,
         grid::{Axis, Grid},
@@ -581,39 +581,45 @@ impl IONEX {
 
     /// Reduce this [IONEX] definition so it is reduced to a regional ROI,
     /// described by a complex [Polygon] in decimal degrees.
+    /// The quantization (both spatial and temporal) is preserved, only the
+    /// spatial dimensions are modified by this operation.
     /// [Polygon::bounding_rect] must be defined for this operation to work correctly.
-    pub fn to_regional_ionex(&self, roi: Polygon) -> Option<IONEX> {
+    pub fn to_regional_ionex(&self, roi: Polygon) -> Result<IONEX, Error> {
         let mut ionex = IONEX::default();
 
-        let bounding_rect = roi.bounding_rect()?;
+        let bounding_rect = roi.bounding_rect().ok_or(Error::UndefinedBoundaries)?;
 
         let (min_long, min_lat) = (bounding_rect.min().x, bounding_rect.min().y);
         let (max_long, max_lat) = (bounding_rect.max().x, bounding_rect.max().y);
 
-        // copy attributes
-        ionex.attributes = self.attributes.clone();
-
-        if let Some(attributes) = &mut ionex.attributes {
-            attributes.region = Region::Regional;
+        // attributes
+        match &self.attributes {
+            Some(attributes) => {
+                ionex.attributes = Some(attributes.clone().regionalized());
+            },
+            None => {
+                let mut attributes = FileAttributes::default().regionalized();
+                ionex.attributes = Some(attributes);
+            },
         }
 
         // copy header
         ionex.header = self.header.clone();
 
-        // stretch factors
+        // upscale so the grid boundaries become a perfect multiple
+        let long_upscaling = 0.0;
+        let lat_upscaling = 0.0;
 
-        // rework header
-        ionex.header.grid.latitude.start = max_lat;
-        ionex.header.grid.latitude.end = min_lat;
-        ionex.header.grid.longitude.start = min_long;
-        ionex.header.grid.longitude.end = max_long;
+        // spatial upscaling
+        ionex.spatial_stretching_mut(Axis::Latitude, lat_upscaling)?;
+        ionex.spatial_stretching_mut(Axis::Longitude, long_upscaling)?;
 
-        let roi = Geometry::Polygon(roi);
+        // simply restrict to ROI area
+        let geometry = Geometry::Polygon(roi);
 
-        // restrict area
         let cells = self
             .map_cell_iter()
-            .filter(|cell| cell.contains(&roi))
+            .filter(|cell| cell.contains(&geometry))
             .collect::<Vec<_>>();
 
         ionex.record = Record::from_map_cells(
@@ -625,7 +631,7 @@ impl IONEX {
             &cells,
         );
 
-        Some(ionex)
+        Ok(ionex)
     }
 
     /// Modify the grid dimensions by a positive, possibly fractional number,
@@ -924,7 +930,52 @@ impl IONEX {
         )
     }
 
-    /// Returns the [MapCell] that contains following [Geometry].
+    /// Obtain a [MapCell] at specified point in time, wrapping this ROI.
+    /// The temporal instant must be within the current temporal axis.
+    /// The returned [MapCell] is a bounding rectangle, of 4 corners
+    /// correctly interpolated in space and time, than you can further manipulate.
+    /// Depending on the ROI dimensions, this is either:
+    /// - a unitary [MapCell]: the smallest region we can represent in this [IONEX].
+    /// Prefer [Self::unitary_roi_at] in this case, to not bother designing the unit [Rect].
+    /// - or the closest fitting [MapCell] (wrapping boundaries) that we could fit
+    pub fn roi_at(&self, epoch: Epoch, roi: Rect) -> Result<MapCell, Error> {
+        if epoch < self.header.epoch_of_first_map {
+            return Err(Error::TemporalMismatch);
+        }
+
+        if epoch > self.header.epoch_of_last_map {
+            return Err(Error::TemporalMismatch);
+        }
+
+        // for each corner of the ROI, determine the best suited
+        // map cell for spatial interpolation
+
+        // TODO
+        Err(Error::TemporalMismatch)
+    }
+
+    /// Obtain the smallest [MapCell] (map quantization) at provided point in time
+    /// and coordinates.
+    ///
+    /// ## Input
+    /// - epoch: [Epoch] that must fit within the temporal axis.
+    /// If this instant aligns with the sampling rate, this process will not require temporal interpolation.
+    /// - coordinates: 2D [Point] that must lie within the map.
+    /// If the coordinates align with the grid, this process will not require spatial interpolation.
+    /// - card: [Cardinal] defining which corner these coordinates will represent in the returned [MapCell].
+    /// For example:
+    ///   - [Cardinal::NorthEast] means the northeastern component of fitted ROI [MapCell] will lie at these coordinates.
+    pub fn unitary_roi_at(
+        &self,
+        epoch: Epoch,
+        coordinates: Point<f64>,
+        card: Cardinal,
+    ) -> Result<MapCell, Error> {
+        // TODO
+        Err(Error::TemporalMismatch)
+    }
+
+    /// Obtain the best suited [MapCell] spatially wrapping this Geometry that contains following [Geometry].
     ///
     /// ## Input
     /// - epoch: [Epoch] that must exist in this [IONEX]
@@ -950,109 +1001,109 @@ impl IONEX {
         )
     }
 
-    /// Interpolate TEC values for all discrete coordinates described by the following [LineString]
-    /// (in decimal degrees), at specific point in time that must exist within this record.
-    /// Otherwise, you should use [Self::temporal_spatial_area_interpolation] to also
-    /// use temporal interpolation from two existing data points.
-    /// ```
-    /// use std::str::FromStr;
-    /// use ionex::prelude::{IONEX, Epoch, LineString, coord, Contains};
-    ///
-    /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
-    ///    .unwrap();
-    ///
-    /// // ROI (ddeg) must be within borders
-    /// let roi_ddeg = LineString::new(vec![
-    ///     coord! { x: -50.0, y: -23.0 },
-    ///     coord! { x: -50.25, y: -23.1 },
-    ///     coord! { x: -50.5, y: -23.2 },
-    /// ]);
-    ///
-    /// // you can double check that
-    /// assert!(ionex.bounding_rect_degrees().contains(&roi_ddeg));
-    ///
-    /// // Epoch must exist in the record
-    /// let noon = Epoch::from_str("2022-01-02T12:00:00 UTC")
-    ///     .unwrap();
-    ///
-    ///
-    /// ```
-    pub fn spatial_area_interpolation(
-        &self,
-        area: &LineString,
-        epoch: Epoch,
-    ) -> BTreeMap<Key, TEC> {
-        let mut values = BTreeMap::new();
+    // /// Interpolate TEC values for all discrete coordinates described by the following [LineString]
+    // /// (in decimal degrees), at specific point in time that must exist within this record.
+    // /// Otherwise, you should use [Self::temporal_spatial_area_interpolation] to also
+    // /// use temporal interpolation from two existing data points.
+    // /// ```
+    // /// use std::str::FromStr;
+    // /// use ionex::prelude::{IONEX, Epoch, LineString, coord, Contains};
+    // ///
+    // /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
+    // ///    .unwrap();
+    // ///
+    // /// // ROI (ddeg) must be within borders
+    // /// let roi_ddeg = LineString::new(vec![
+    // ///     coord! { x: -50.0, y: -23.0 },
+    // ///     coord! { x: -50.25, y: -23.1 },
+    // ///     coord! { x: -50.5, y: -23.2 },
+    // /// ]);
+    // ///
+    // /// // you can double check that
+    // /// assert!(ionex.bounding_rect_degrees().contains(&roi_ddeg));
+    // ///
+    // /// // Epoch must exist in the record
+    // /// let noon = Epoch::from_str("2022-01-02T12:00:00 UTC")
+    // ///     .unwrap();
+    // ///
+    // ///
+    // /// ```
+    // pub fn spatial_area_interpolation(
+    //     &self,
+    //     area: &LineString,
+    //     epoch: Epoch,
+    // ) -> BTreeMap<Key, TEC> {
+    //     let mut values = BTreeMap::new();
 
-        let fixed_altitude_km = self.header.grid.altitude.start;
+    //     let fixed_altitude_km = self.header.grid.altitude.start;
 
-        // for all requested coordinates
-        for point in area.points() {
-            let geo = Geometry::Point(point);
+    //     // for all requested coordinates
+    //     for point in area.points() {
+    //         let geo = Geometry::Point(point);
 
-            let key = Key::from_decimal_degrees_km(epoch, point.y(), point.x(), fixed_altitude_km);
+    //         let key = Key::from_decimal_degrees_km(epoch, point.y(), point.x(), fixed_altitude_km);
 
-            for cell in self.synchronous_map_cell_iter(epoch) {
-                if cell.contains(&geo) {
-                    let tec = cell.spatial_interpolation(point);
-                    values.insert(key, tec);
-                }
-            }
-        }
+    //         for cell in self.synchronous_map_cell_iter(epoch) {
+    //             if cell.contains(&geo) {
+    //                 let tec = cell.spatial_interpolation(point);
+    //                 values.insert(key, tec);
+    //             }
+    //         }
+    //     }
 
-        values
-    }
+    //     values
+    // }
 
-    /// Interpolate TEC values for all discrete coordinates described by the following [LineString]
-    /// (in decimal degrees), at specific point in time that does exist within this record.
-    /// We will interpolate the two neighbouring data points, which is not feasible at day boundaries.
-    pub fn temporal_spatial_area_interpolation(
-        &self,
-        area: &LineString,
-        epoch: Epoch,
-    ) -> BTreeMap<Key, TEC> {
-        let mut values = BTreeMap::new();
+    // /// Interpolate TEC values for all discrete coordinates described by the following [LineString]
+    // /// (in decimal degrees), at specific point in time that does exist within this record.
+    // /// We will interpolate the two neighbouring data points, which is not feasible at day boundaries.
+    // pub fn temporal_spatial_area_interpolation(
+    //     &self,
+    //     area: &LineString,
+    //     epoch: Epoch,
+    // ) -> BTreeMap<Key, TEC> {
+    //     let mut values = BTreeMap::new();
 
-        let (min_t, max_t) = (
-            (epoch - self.header.sampling_period),
-            (epoch + self.header.sampling_period),
-        );
+    //     let (min_t, max_t) = (
+    //         (epoch - self.header.sampling_period),
+    //         (epoch + self.header.sampling_period),
+    //     );
 
-        let (min_t, max_t) = (
-            min_t.round(self.header.sampling_period),
-            max_t.round(self.header.sampling_period),
-        );
+    //     let (min_t, max_t) = (
+    //         min_t.round(self.header.sampling_period),
+    //         max_t.round(self.header.sampling_period),
+    //     );
 
-        // for all requested coordinates
-        for point in area.points() {
-            let geo = Geometry::Point(point);
+    //     // for all requested coordinates
+    //     for point in area.points() {
+    //         let geo = Geometry::Point(point);
 
-            for cell_t0 in self.synchronous_map_cell_iter(min_t) {
-                if cell_t0.contains(&geo) {
-                    for cell_t1 in self.synchronous_map_cell_iter(max_t) {
-                        if cell_t1.contains(&geo) {
-                            if let Some(interpolated) =
-                                cell_t0.temporal_spatial_interpolation(epoch, point, &cell_t1)
-                            {
-                                let key = Key {
-                                    epoch,
-                                    coordinates: QuantizedCoordinates::from_decimal_degrees(
-                                        point.y(),
-                                        point.x(),
-                                        self.header.grid.altitude.start,
-                                    ),
-                                };
+    //         for cell_t0 in self.synchronous_map_cell_iter(min_t) {
+    //             if cell_t0.contains(&geo) {
+    //                 for cell_t1 in self.synchronous_map_cell_iter(max_t) {
+    //                     if cell_t1.contains(&geo) {
+    //                         if let Some(interpolated) =
+    //                             cell_t0.temporal_spatial_interpolation(epoch, point, &cell_t1)
+    //                         {
+    //                             let key = Key {
+    //                                 epoch,
+    //                                 coordinates: QuantizedCoordinates::from_decimal_degrees(
+    //                                     point.y(),
+    //                                     point.x(),
+    //                                     self.header.grid.altitude.start,
+    //                                 ),
+    //                             };
 
-                                values.insert(key, interpolated);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    //                             values.insert(key, interpolated);
+    //                         }
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
 
-        values
-    }
+    //     values
+    // }
 }
 
 /// Merge two [IONEX] structures into one.

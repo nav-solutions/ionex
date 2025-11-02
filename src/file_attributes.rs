@@ -50,6 +50,20 @@ pub struct FileAttributes {
     pub gzip_compressed: bool,
 }
 
+impl FileAttributes {
+    /// Copies and returns a [FileAttributes] converted to global/worldwide map
+    pub fn globalized(mut self) -> Self {
+        self.region = Region::Worldwide;
+        self
+    }
+
+    /// Copies and returns a [FileAttributes] converted to regional map
+    pub fn regionalized(mut self) -> Self {
+        self.region = Region::Regional;
+        self
+    }
+}
+
 impl Default for FileAttributes {
     fn default() -> Self {
         Self {

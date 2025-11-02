@@ -96,8 +96,17 @@ pub enum Error {
     #[error("strech factor must be positive finite number")]
     InvalidStretchFactor,
 
+    #[error("undefined ROI exterior boundaries")]
+    UndefinedBoundaries,
+
+    #[error("provided coordinates are outside boundaries")]
+    OutsideBoundaries,
+
     #[error("both regions do not describe the same spatial ROI")]
     SpatialMismatch,
+
+    #[error("both regions are not synchronous in time")]
+    TemporalMismatch,
 
     #[error("invalid temporal interpolation instant")]
     InvalidTemporalPoint,

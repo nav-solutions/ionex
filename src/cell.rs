@@ -2,6 +2,22 @@ use geo::{Contains, GeodesicArea, Geometry, Point, Rect};
 
 use crate::prelude::{Epoch, Error, TEC};
 
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Cardinal {
+    /// NE [Cardinal]
+    NorthEast,
+
+    /// NW [Cardinal]
+    NorthWest,
+
+    /// SE [Cardinal]
+    SouthEast,
+
+    /// SW [Cardinal]
+    SouthWest,
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct MapPoint {
     /// [Point]
@@ -138,6 +154,44 @@ impl MapCell {
         self.epoch == rhs.epoch
     }
 
+    /// Returns true if self is the northern neighbor of provided rhs [MapCell].
+    pub fn is_northern_neighbor(&self, rhs: &Self) -> bool {
+        rhs.north_east.point == self.south_east.point
+            && rhs.north_west.point == self.south_west.point
+    }
+
+    /// Returns true if self is the southern neighbor of provided rhs [MapCell].
+    pub fn is_southern_neighbor(&self, rhs: &Self) -> bool {
+        rhs.south_east.point == self.north_east.point
+            && rhs.south_west.point == self.north_west.point
+    }
+
+    /// Returns true if self is the easthern neighbor of provided rhs [MapCell].
+    pub fn is_eastern_neighbor(&self, rhs: &Self) -> bool {
+        rhs.north_west.point == self.north_east.point
+            && rhs.south_west.point == self.south_east.point
+    }
+
+    /// Returns true if self is the westhern neighbor of provided rhs [MapCell].
+    pub fn is_western_neighbor(&self, rhs: &Self) -> bool {
+        rhs.north_east.point == self.north_west.point
+            && rhs.south_east.point == self.south_west.point
+    }
+
+    /// Returns true if both cells are neighbors, meaning, they share two corners.
+    pub fn is_neighbor(&self, rhs: &Self) -> bool {
+        self.is_northern_neighbor(rhs)
+            || self.is_southern_neighbor(rhs)
+            || self.is_western_neighbor(rhs)
+            || self.is_eastern_neighbor(rhs)
+    }
+
+    /// Returns true if this [MapCell] totally contains (wrapps) rhs cell.
+    /// Meaning, rhs is fully contained within Self.
+    pub fn contains_entirely(&self, rhs: &Self) -> bool {
+        self.contains(&Geometry::Rect(rhs.bounding_rect_degrees()))
+    }
+
     /// Defines a unitary [MapCell] ((0,0), (0,1), (1,0), (1,1)) with associated TEC values,
     /// where
     /// - (x/long=0, y/lat=0) is the SW corner
@@ -213,27 +267,28 @@ impl MapCell {
 
     /// Returns central [Point] of this [MapCell].
     pub fn center(&self) -> Point<f64> {
-        geo::Point(self.borders().center())
+        geo::Point(self.bounding_rect_degrees().center())
     }
 
-    /// Returns borders of this [MapCell] expressed as a [Rect]angle.
-    pub fn borders(&self) -> Rect {
+    /// Returns borders of this [MapCell] expressed as a [Rect]angle, in decimal degrees.
+    pub fn bounding_rect_degrees(&self) -> Rect {
         Rect::new(self.south_west.point, self.north_east.point)
     }
 
     /// Returns geodesic perimeter (in meters) of this [MapCell].
     pub fn geodesic_perimeter(&self) -> f64 {
-        self.borders().geodesic_perimeter()
+        self.bounding_rect_degrees().geodesic_perimeter()
     }
 
     /// Returns geodesic area (in squared meters) of this [MapCell].
     pub fn geodesic_area(&self) -> f64 {
-        self.borders().geodesic_area_unsigned()
+        self.bounding_rect_degrees().geodesic_area_unsigned()
     }
 
-    /// Returns true if following [Geometry] is contained within this [MapCell].
+    /// Returns true if following [Geometry], expressed in decimal degrees,
+    /// is contained within this [MapCell].
     pub fn contains(&self, geometry: &Geometry<f64>) -> bool {
-        self.borders().contains(geometry)
+        self.bounding_rect_degrees().contains(geometry)
     }
 
     /// Copies and updates the Northeastern TEC component
@@ -268,13 +323,13 @@ impl MapCell {
 
     /// Returns latitude span of this [MapCell] in degrees
     pub fn latitude_span_degrees(&self) -> f64 {
-        let borders = self.borders();
+        let borders = self.bounding_rect_degrees();
         borders.max().y - borders.min().y
     }
 
     /// Returns longitude span of this [MapCell] in degrees
     pub fn longitude_span_degrees(&self) -> f64 {
-        let borders = self.borders();
+        let borders = self.bounding_rect_degrees();
         borders.max().x - borders.min().x
     }
 
@@ -331,7 +386,11 @@ impl MapCell {
     /// let tec = cell.spatial_interpolation(Point::new(0.01, 0.01));
     /// assert_eq!(tec.tecu(), 0.9801);
     /// ```
-    pub fn spatial_interpolation(&self, point: Point<f64>) -> TEC {
+    pub fn spatial_tec_interp(&self, point: Point<f64>) -> Result<TEC, Error> {
+        if !self.contains(&Geometry::Point(point)) {
+            return Err(Error::OutsideBoundaries);
+        }
+
         let (latitude_span, longitude_span) = self.latitude_longitude_span_degrees();
 
         let (p, q) = (point.y() / latitude_span, point.x() / longitude_span);
@@ -346,7 +405,32 @@ impl MapCell {
         let tecu =
             (1.0 - p) * (1.0 - q) * e00 + p * (1.0 - q) * e10 + q * (1.0 - p) * e01 + p * q * e11;
 
-        TEC::from_tecu(tecu)
+        Ok(TEC::from_tecu(tecu))
+    }
+
+    /// Merges two neighboring [MapCell]s forming a new [MapCell] with best precision.
+    /// Both cells must be synchronous.
+    pub fn merge_neighbors(&self, rhs: &Self) -> Result<Self, Error> {
+        if !self.temporal_match(rhs) {
+            return Err(Error::TemporalMismatch);
+        }
+
+        // 1: determine the matching corners. The center
+        // point of the matching line is to become the new center.
+        // 2: form a new cell, of the boundary rect, interpolate
+        // both TEC at the new center
+
+        if self.is_northern_neighbor(rhs) {
+            Ok(Self::default()) // TODO
+        } else if self.is_southern_neighbor(rhs) {
+            Ok(Self::default()) // TODO
+        } else if self.is_western_neighbor(rhs) {
+            Ok(Self::default()) // TODO
+        } else if self.is_eastern_neighbor(rhs) {
+            Ok(Self::default()) // TODO
+        } else {
+            Err(Error::SpatialMismatch)
+        }
     }
 
     // /// Interpolates two [MapCell]s that must describe the same area,
@@ -476,16 +560,16 @@ impl MapCell {
     /// let tec = cell0.temporal_spatial_interpolation(t_ok, center, &cell1).unwrap();
     /// assert_eq!(tec.tecu(), 1.0);
     /// ```
-    pub fn temporal_spatial_interpolation(
+    pub fn temporal_spatial_tec_interp(
         &self,
         epoch: Epoch,
-        point: Point<f64>,
+        coordinates: Point<f64>,
         rhs: &Self,
-    ) -> Option<TEC> {
+    ) -> Result<TEC, Error> {
         // interpolate at exact coordinates
         let (tecu_0, tecu_1) = (
-            self.spatial_interpolation(point).tecu(),
-            rhs.spatial_interpolation(point).tecu(),
+            self.spatial_tec_interp(coordinates)?.tecu(),
+            rhs.spatial_tec_interp(coordinates)?.tecu(),
         );
 
         if epoch >= self.epoch && epoch < rhs.epoch {
@@ -495,7 +579,7 @@ impl MapCell {
             let tecu = (rhs.epoch - epoch).to_seconds() / dt * tecu_0
                 + (epoch - self.epoch).to_seconds() / dt * tecu_1;
 
-            Some(TEC::from_tecu(tecu))
+            Ok(TEC::from_tecu(tecu))
         } else if epoch >= rhs.epoch && epoch < self.epoch {
             // backwards
             let dt = (self.epoch - rhs.epoch).to_seconds();
@@ -503,9 +587,9 @@ impl MapCell {
             let tecu = (self.epoch - epoch).to_seconds() / dt * tecu_1
                 + (epoch - rhs.epoch).to_seconds() / dt * tecu_0;
 
-            Some(TEC::from_tecu(tecu))
+            Ok(TEC::from_tecu(tecu))
         } else {
-            None
+            Err(Error::TemporalMismatch)
         }
     }
 }
