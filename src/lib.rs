@@ -115,6 +115,20 @@ fn div_ceil(value: usize, divider: usize) -> usize {
     }
 }
 
+/// Converts a geo [Rect]angle to NE, SE, SW, NW (latitude, longitude) quadruplets
+pub(crate) fn rectangle_to_cardinals(
+    rect: Rect,
+) -> ((f64, f64), (f64, f64), (f64, f64), (f64, f64)) {
+    let (min, width, height) = (rect.min(), rect.width(), rect.height());
+    let (x0, y0) = (min.x, min.y);
+    (
+        (x0, y0),
+        (x0 + width, y0),
+        (x0 + width, y0 + height),
+        (x0, y0 + height),
+    )
+}
+
 /// macro to format one header line or a comment
 pub(crate) fn fmt_ionex(content: &str, marker: &str) -> String {
     if content.len() < 60 {
@@ -1234,7 +1248,7 @@ impl gnss_qc_traits::Merge for IONEX {
 
 #[cfg(test)]
 mod test {
-    use crate::{div_ceil, fmt_comment, prelude::*};
+    use crate::{div_ceil, fmt_comment, prelude::*, rectangle_to_cardinals};
 
     #[test]
     fn fmt_comments_singleline() {
@@ -1275,22 +1289,38 @@ mod test {
     }
 
     #[test]
-    #[ignore]
-    fn regional_ionex() {
-        let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz").unwrap_or_else(|e| {
-            panic!("Failed to parse CKMG0020: {}", e);
-        });
-
-        let roi = Rect::new(coord!(x: -180.0, y: -85.0), coord!(x: 180.0, y: -82.5));
-
-        let regional = ionex.to_regional_ionex(roi.into()).unwrap();
-
-        // dump
-        regional.to_file("region.txt").unwrap();
-
-        // parse
-        let parsed = IONEX::from_file("region.txt").unwrap_or_else(|e| {
-            panic!("Failed to parse region.txt: {}", e);
-        });
+    fn rect_to_cardinals() {
+        for (rect, ((lat11, long11), (lat12, long12), (lat21, long21), (lat22, long22))) in [
+            (
+                Rect::new(coord!(x: -30.0, y: -30.0), coord!(x: 30.0, y: 30.0)),
+                (
+                    (-30.0, -30.0),
+                    (-30.0, -30.0),
+                    (-30.0, -30.0),
+                    (-30.0, -30.0),
+                ),
+            ),
+            (
+                Rect::new(coord!(x: -40.0, y: -40.0), coord!(x: 40.0, y: 50.0)),
+                (
+                    (-30.0, -30.0),
+                    (-30.0, -30.0),
+                    (-30.0, -30.0),
+                    (-30.0, -30.0),
+                ),
+            ),
+        ] {
+            assert_eq!(
+                rectangle_to_cardinals(rect),
+                (
+                    (lat11, long11),
+                    (lat12, long12),
+                    (lat21, long21),
+                    (lat22, long22)
+                ),
+                "failed for {:?}",
+                rect
+            );
+        }
     }
 }

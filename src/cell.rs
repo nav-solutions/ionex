@@ -1,6 +1,9 @@
 use geo::{Contains, GeodesicArea, Geometry, Point, Rect};
 
-use crate::prelude::{Epoch, Error, TEC};
+use crate::{
+    prelude::{Epoch, Error, TEC},
+    rectangle_to_cardinals,
+};
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -410,7 +413,150 @@ impl MapCell {
         Ok(TEC::from_tecu(tecu))
     }
 
-    /// Merges two neighboring [MapCell]s forming a new [MapCell] with best precision.
+    /// Determines the northeastern cell amongst a grouping of 4
+    pub fn northeasternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
+        let min_x = cell1
+            .point
+            .x()
+            .min(cell2.point.x())
+            .min(cell3.point.x())
+            .min(cell4.point.x());
+        let min_y = cell1
+            .point
+            .y()
+            .min(cell2.point.y())
+            .min(cell3.point.y())
+            .min(cell4.point.y());
+
+        if cell1.point.x() == min_x && cell1.point.y() == min_y {
+            *cell_1
+        } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
+            *cell_2
+        } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
+            *cell_3
+        } else {
+            *cell_4
+        }
+    }
+
+    /// Determines the northwestern cell amongst a grouping of 4
+    pub fn northeasternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
+        let min_x = cell1
+            .point
+            .x()
+            .min(cell2.point.x())
+            .min(cell3.point.x())
+            .min(cell4.point.x());
+        let min_y = cell1
+            .point
+            .y()
+            .min(cell2.point.y())
+            .min(cell3.point.y())
+            .min(cell4.point.y());
+
+        if cell1.point.x() == min_x && cell1.point.y() == min_y {
+            *cell_1
+        } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
+            *cell_2
+        } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
+            *cell_3
+        } else {
+            *cell_4
+        }
+    }
+
+    /// Determines the southwestern cell amongst a grouping of 4
+    pub fn southwesternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
+        let min_x = cell1
+            .point
+            .x()
+            .min(cell2.point.x())
+            .min(cell3.point.x())
+            .min(cell4.point.x());
+        let min_y = cell1
+            .point
+            .y()
+            .min(cell2.point.y())
+            .min(cell3.point.y())
+            .min(cell4.point.y());
+
+        if cell1.point.x() == min_x && cell1.point.y() == min_y {
+            *cell_1
+        } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
+            *cell_2
+        } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
+            *cell_3
+        } else {
+            *cell_4
+        }
+    }
+
+    /// Determines the southwestern cell amongst a grouping of 4
+    pub fn southwesternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
+        let min_x = cell1
+            .point
+            .x()
+            .min(cell2.point.x())
+            .min(cell3.point.x())
+            .min(cell4.point.x());
+        let min_y = cell1
+            .point
+            .y()
+            .min(cell2.point.y())
+            .min(cell3.point.y())
+            .min(cell4.point.y());
+
+        if cell1.point.x() == min_x && cell1.point.y() == min_y {
+            *cell_1
+        } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
+            *cell_2
+        } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
+            *cell_3
+        } else {
+            *cell_4
+        }
+    }
+
+    /// Interpolate the TEC at 4 points described by provided [Rect]angle, returning a new [MapCell].
+    /// We use 4 neighboring [MapCell]s to apply the interpolation equation with the highest precision
+    /// on each corner of the [Rect]angle. This is to be used when the ROI does not align with the grid space.
+    pub fn interpolate_at_grouping4(
+        &self,
+        roi: Rect,
+        neighbor_1: &Self,
+        neighbor_2: &Self,
+        neighbor_3: &Self,
+    ) -> Result<Self, Error> {
+        let (
+            (roi_ne_lat, roi_ne_long),
+            (roi_se_lat, roi_se_long),
+            (roi_sw_lat, roi_sw_long),
+            (roi_nw_lat, roi_nw_long),
+        ) = rectangle_to_cardinals(roi);
+
+        // determines NE, SE, NW, NE cells conveniently
+        // so we tolerate a random order (but they need to be neighboring cells)
+        let ne_cell = Self::northeasternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
+        let se_cell = Self::southasternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
+        let nw_cell = Self::northwesternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
+        let ne_cell = Self::northeasternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
+
+        // verifies they are all neighboring cells
+        if !nw_cell.is_western_neighbor(ne_cell) {
+            return Err();
+        }
+        if !ne_cell.is_northern_neighbor(se_cell) {
+            return Err();
+        }
+        if !se_cell.is_eastern_neighbor(sw_cell) {
+            return Err();
+        }
+        if !nw_cell.is_northern_neighbor(sw_cell) {
+            return Err();
+        }
+    }
+
+    /// Merges two neighboring [MapCell]s forming a new (upscaled) [MapCell].
     /// Both cells must be synchronous.
     pub fn merge_neighbors(&self, rhs: &Self) -> Result<Self, Error> {
         if !self.temporal_match(rhs) {
