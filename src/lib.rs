@@ -60,7 +60,7 @@ use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 use hifitime::prelude::Epoch;
 
 use crate::{
-    cell::{Cardinal, MapCell, MapPoint},
+    cell::{Cardinal, Cell9, MapCell, TecPoint},
     coordinates::QuantizedCoordinates,
     error::{Error, FormattingError, ParsingError},
     file_attributes::{FileAttributes, Region},
@@ -76,7 +76,7 @@ pub mod prelude {
     // export
     pub use crate::{
         bias::BiasSource,
-        cell::{Cardinal, MapCell},
+        cell::{Cardinal, Cell9, MapCell},
         error::{Error, FormattingError, ParsingError},
         file_attributes::*,
         grid::{Axis, Grid},
@@ -686,15 +686,16 @@ impl IONEX {
     }
 
     /// Modify the grid spacing (quantization) while preserving the dimensions,
-    /// and interpolates the TEC values.
+    /// and interpolates the new TEC values.
     ///
     /// This only modify the grid quantization, the map dimensions are preserved.
     ///
     /// ## Input
     /// - axis: [Axis] to be resampled
     /// - factor:
-    ///    - > 1.0: upscaling
-    ///    - < 1.0: downscaling
+    ///    - > 1.0: spatial upscaling. The grid precision increases,
+    /// we interpolate the TEC at new intermiediate coordinates.
+    ///    - < 1.0: downscaling. The grid precision decreases.
     ///    - 0.0: invalid
     pub fn spatially_resampled(&self, axis: Axis, factor: f64) -> Result<IONEX, Error> {
         let mut s = self.clone();
@@ -768,6 +769,10 @@ impl IONEX {
         Box::new(self.record.map.keys().map(|k| k.epoch).unique().sorted())
     }
 
+    /// Iterates this [IONEX] by a group of 9 neighboring [MapCell]s,
+    /// which is particularly convenient for accurate interpolation and upscaling.
+    pub fn iter_cell9(&self) -> Box<dyn Iterator<Item = Cell9> + '_> {}
+
     /// Modify the grid spacing (quantization) while preserving the dimensions,
     /// and interpolates the TEC values.
     ///
@@ -802,8 +807,21 @@ impl IONEX {
             },
         }
 
+        let lat_pairs = self.header.grid.latitude.quantize().tuple_windows();
+        let long_pairs = self.header.grid.longitude.quantize().tuple_windows();
+
+        // applies the stretching
+
         // synchronous spatial interpolation
-        for epoch in self.epoch_iter() {}
+        for epoch in self.epoch_iter() {
+            if factor > 1.0 {
+                // upscaling
+            } else {
+                // downscaling
+            }
+        }
+
+        // saturate the possible overflows to the world map proj
 
         Ok(())
     }
@@ -867,7 +885,6 @@ impl IONEX {
         let timeseries = self.header.timeseries();
 
         let lat_pairs = self.header.grid.latitude.quantize().tuple_windows();
-
         let long_pairs = self.header.grid.longitude.quantize().tuple_windows();
 
         let fixed_altitude_km = self.header.grid.altitude.start;
@@ -923,19 +940,19 @@ impl IONEX {
 
                     Some(MapCell {
                         epoch,
-                        north_east: MapPoint {
+                        north_east: TecPoint {
                             tec: *northeast,
                             point: Point::new(long1.real_value(), lat1.real_value()),
                         },
-                        north_west: MapPoint {
+                        north_west: TecPoint {
                             tec: *northwest,
                             point: Point::new(long2.real_value(), lat1.real_value()),
                         },
-                        south_east: MapPoint {
+                        south_east: TecPoint {
                             tec: *southeast,
                             point: Point::new(long1.real_value(), lat2.real_value()),
                         },
-                        south_west: MapPoint {
+                        south_west: TecPoint {
                             tec: *southwest,
                             point: Point::new(long2.real_value(), lat2.real_value()),
                         },

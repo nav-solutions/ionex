@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use geo::{Contains, GeodesicArea, Geometry, Point, Rect};
 
 use crate::{
@@ -5,29 +7,41 @@ use crate::{
     rectangle_to_cardinals,
 };
 
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Cardinal {
     /// NE [Cardinal]
     NorthEast,
 
+    /// N [Cardinal]
+    North,
+
     /// NW [Cardinal]
     NorthWest,
+
+    /// W [Cardinal]
+    West,
+
+    /// SW [Cardinal]
+    SouthWest,
+
+    /// S [Cardinal]
+    South,
 
     /// SE [Cardinal]
     SouthEast,
 
-    /// SW [Cardinal]
-    SouthWest,
+    /// E [Cardinal]
+    East,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct MapPoint {
-    /// [Point]
-    pub point: Point<f64>,
-
+pub struct TecPoint {
     /// TEC
     pub tec: TEC,
+
+    /// [Point]
+    pub point: Point<f64>,
 }
 
 /// [MapCell] describing a 4 corner region that we can interpolate.
@@ -38,17 +52,88 @@ pub struct MapCell {
     /// Epoch of observation
     pub epoch: Epoch,
 
-    /// North East [MapPoint]
-    pub north_east: MapPoint,
+    /// North East [TecPoint]
+    pub north_east: TecPoint,
 
-    /// North West [MapPoint]
-    pub north_west: MapPoint,
+    /// North West [TecPoint]
+    pub north_west: TecPoint,
 
-    /// South East [MapPoint]
-    pub south_east: MapPoint,
+    /// South East [TecPoint]
+    pub south_east: TecPoint,
 
-    /// South West [MapPoint]
-    pub south_west: MapPoint,
+    /// South West [TecPoint]
+    pub south_west: TecPoint,
+}
+
+/// A structure holding 9 synchronous neighboring [MapCells]
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Cell9 {
+    /// The central [MapCell]
+    pub central: MapCell,
+
+    /// 8 Neighboring [MapCells]
+    pub neighbors: HashMap<Cardinal, MapCell>,
+}
+
+impl Cell9 {
+    /// Returns true if this [Cell9] definition is "complete"
+    pub(crate) fn is_complete(&self) -> bool {
+        self.neighbors.len() == 8
+    }
+
+    /// Builds a new updated [Cell9] with updated central cell.
+    pub fn with_central_cell(mut self, center: MapCell) -> Self {
+        self.central = center;
+        self
+    }
+
+    /// Builds a new [Cell9] conveniently from 9 [MapCells], correctly
+    /// electing the central ROI, and the 8 neighbors.
+    /// Returns None if no central ROI exists or could not determine 8 neighbors.
+    pub fn from_slice(cells: [MapCell; 9]) -> Option<Self> {
+        for i in 0..9 {
+            // determine whether the ith cell is the potential center
+            let mut all_neighbors = true;
+            // must be neighbor with all other 8 ROIs
+            for j in 0..9 {
+                if j != i {
+                    if !cells[i].is_neighbor(&cells[j]) {
+                        all_neighbors = false;
+                        break;
+                    }
+                }
+            }
+
+            if all_neighbors {
+                let mut ret = Self::default().with_central_cell(cells[i]);
+
+                // i is the central ROI, order other ROIs correctly & exit
+                for j in 0..9 {
+                    if j != i {
+                        if cells[j].is_northwestern_neighbor(&cells[i]) {
+                            ret.neighbors.insert(Cardinal::NorthWest, cells[j]);
+                        } else if cells[j].is_northeastern_neighbor(&cells[i]) {
+                            ret.neighbors.insert(Cardinal::NorthEast, cells[j]);
+                        } else if cells[j].is_northern_neighbor(&cells[i]) {
+                            ret.neighbors.insert(Cardinal::North, cells[j]);
+                        } else if cells[j].is_southwestern_neighbor(&cells[i]) {
+                            ret.neighbors.insert(Cardinal::SouthWest, cells[j]);
+                        } else if cells[j].is_southeastern_neighbor(&cells[i]) {
+                            ret.neighbors.insert(Cardinal::SouthEast, cells[j]);
+                        } else if cells[j].is_southern_neighbor(&cells[i]) {
+                            ret.neighbors.insert(Cardinal::South, cells[j]);
+                        }
+                    }
+                }
+
+                if ret.is_complete() {
+                    return Some(ret);
+                }
+            }
+        }
+
+        None
+    }
 }
 
 impl MapCell {
@@ -67,19 +152,19 @@ impl MapCell {
     ) -> Self {
         Self {
             epoch,
-            north_east: MapPoint {
+            north_east: TecPoint {
                 point: Point::new(northeast_ddeg.0, northeast_ddeg.1),
                 tec: northeast_tec,
             },
-            north_west: MapPoint {
+            north_west: TecPoint {
                 point: Point::new(northwest_ddeg.0, northwest_ddeg.1),
                 tec: northwest_tec,
             },
-            south_east: MapPoint {
+            south_east: TecPoint {
                 point: Point::new(southeast_ddeg.0, southeast_ddeg.1),
                 tec: southeast_tec,
             },
-            south_west: MapPoint {
+            south_west: TecPoint {
                 point: Point::new(southwest_ddeg.0, southwest_ddeg.1),
                 tec: southwest_tec,
             },
@@ -101,32 +186,32 @@ impl MapCell {
     ) -> Self {
         Self {
             epoch,
-            north_east: MapPoint {
+            north_east: TecPoint {
                 point: Point::new(northeast_rad.0.to_degrees(), northeast_rad.1.to_degrees()),
                 tec: northeast_tec,
             },
-            north_west: MapPoint {
+            north_west: TecPoint {
                 point: Point::new(northwest_rad.0.to_degrees(), northwest_rad.1.to_degrees()),
                 tec: northwest_tec,
             },
-            south_east: MapPoint {
+            south_east: TecPoint {
                 point: Point::new(southeast_rad.0.to_degrees(), southeast_rad.1.to_degrees()),
                 tec: southeast_tec,
             },
-            south_west: MapPoint {
+            south_west: TecPoint {
                 point: Point::new(southwest_rad.0.to_degrees(), southwest_rad.1.to_degrees()),
                 tec: southwest_tec,
             },
         }
     }
 
-    /// Define a new [MapCell] from all 4 [MapPoint]s describing each corner at this [Epoch].
+    /// Define a new [MapCell] from all 4 [TecPoint]s describing each corner at this [Epoch].
     pub fn from_cardinal_points(
         epoch: Epoch,
-        north_east: MapPoint,
-        north_west: MapPoint,
-        south_east: MapPoint,
-        south_west: MapPoint,
+        north_east: TecPoint,
+        north_west: TecPoint,
+        south_east: TecPoint,
+        south_west: TecPoint,
     ) -> Self {
         Self {
             epoch,
@@ -157,25 +242,41 @@ impl MapCell {
         self.epoch == rhs.epoch
     }
 
-    /// Returns true if self is the northern neighbor of provided rhs [MapCell].
+    /// Returns true if self is the northern neighbor of provided (rhs) [MapCell].
     pub fn is_northern_neighbor(&self, rhs: &Self) -> bool {
         rhs.north_east.point == self.south_east.point
             && rhs.north_west.point == self.south_west.point
     }
 
-    /// Returns true if self is the southern neighbor of provided rhs [MapCell].
+    pub fn is_northwestern_neighbor(&self, rhs: &Self) -> bool {
+        false // TODO
+    }
+
+    pub fn is_northeastern_neighbor(&self, rhs: &Self) -> bool {
+        false // TODO
+    }
+
+    /// Returns true if self is the southern neighbor of provided (rhs) [MapCell].
     pub fn is_southern_neighbor(&self, rhs: &Self) -> bool {
         rhs.south_east.point == self.north_east.point
             && rhs.south_west.point == self.north_west.point
     }
 
-    /// Returns true if self is the easthern neighbor of provided rhs [MapCell].
+    pub fn is_southeastern_neighbor(&self, rhs: &Self) -> bool {
+        false // TODO
+    }
+
+    pub fn is_southwestern_neighbor(&self, rhs: &Self) -> bool {
+        false // TODO
+    }
+
+    /// Returns true if self is the easthern neighbor of provided (rhs) [MapCell].
     pub fn is_eastern_neighbor(&self, rhs: &Self) -> bool {
         rhs.north_west.point == self.north_east.point
             && rhs.south_west.point == self.south_east.point
     }
 
-    /// Returns true if self is the westhern neighbor of provided rhs [MapCell].
+    /// Returns true if self is the westhern neighbor of provided (rhs) [MapCell].
     pub fn is_western_neighbor(&self, rhs: &Self) -> bool {
         rhs.north_east.point == self.north_west.point
             && rhs.south_east.point == self.south_west.point
@@ -184,14 +285,19 @@ impl MapCell {
     /// Returns true if both cells are neighbors, meaning, they share two corners.
     pub fn is_neighbor(&self, rhs: &Self) -> bool {
         self.is_northern_neighbor(rhs)
+            || self.is_northwestern_neighbor(rhs)
+            || self.is_northeastern_neighbor(rhs)
             || self.is_southern_neighbor(rhs)
+            || self.is_southwestern_neighbor(rhs)
+            || self.is_southeastern_neighbor(rhs)
             || self.is_western_neighbor(rhs)
             || self.is_eastern_neighbor(rhs)
     }
 
-    /// Returns true if this [MapCell] totally contains (wrapps) rhs cell.
-    /// Meaning, rhs is fully contained within Self.
-    pub fn contains_entirely(&self, rhs: &Self) -> bool {
+    /// Returns true if this [MapCell] contains (wrapps) entirely the spatial ROI
+    /// described by the provided (rhs) [MapCell].
+    /// Meaning, rhs is fully contained within self.
+    pub fn wrapps_entirely(&self, rhs: &Self) -> bool {
         self.contains(&Geometry::Rect(rhs.bounding_rect_degrees()))
     }
 
@@ -413,173 +519,173 @@ impl MapCell {
         Ok(TEC::from_tecu(tecu))
     }
 
-    /// Determines the northeastern cell amongst a grouping of 4
-    pub fn northeasternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
-        let min_x = cell1
-            .point
-            .x()
-            .min(cell2.point.x())
-            .min(cell3.point.x())
-            .min(cell4.point.x());
-        let min_y = cell1
-            .point
-            .y()
-            .min(cell2.point.y())
-            .min(cell3.point.y())
-            .min(cell4.point.y());
+    // /// Determines the northeastern cell amongst a grouping of 4
+    // pub fn northeasternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
+    //     let min_x = cell1
+    //         .point
+    //         .x()
+    //         .min(cell2.point.x())
+    //         .min(cell3.point.x())
+    //         .min(cell4.point.x());
+    //     let min_y = cell1
+    //         .point
+    //         .y()
+    //         .min(cell2.point.y())
+    //         .min(cell3.point.y())
+    //         .min(cell4.point.y());
 
-        if cell1.point.x() == min_x && cell1.point.y() == min_y {
-            *cell_1
-        } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
-            *cell_2
-        } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
-            *cell_3
-        } else {
-            *cell_4
-        }
-    }
+    //     if cell1.point.x() == min_x && cell1.point.y() == min_y {
+    //         *cell_1
+    //     } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
+    //         *cell_2
+    //     } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
+    //         *cell_3
+    //     } else {
+    //         *cell_4
+    //     }
+    // }
 
-    /// Determines the northwestern cell amongst a grouping of 4
-    pub fn northeasternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
-        let min_x = cell1
-            .point
-            .x()
-            .min(cell2.point.x())
-            .min(cell3.point.x())
-            .min(cell4.point.x());
-        let min_y = cell1
-            .point
-            .y()
-            .min(cell2.point.y())
-            .min(cell3.point.y())
-            .min(cell4.point.y());
+    // /// Determines the northwestern cell amongst a grouping of 4
+    // pub fn northeasternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
+    //     let min_x = cell1
+    //         .point
+    //         .x()
+    //         .min(cell2.point.x())
+    //         .min(cell3.point.x())
+    //         .min(cell4.point.x());
+    //     let min_y = cell1
+    //         .point
+    //         .y()
+    //         .min(cell2.point.y())
+    //         .min(cell3.point.y())
+    //         .min(cell4.point.y());
 
-        if cell1.point.x() == min_x && cell1.point.y() == min_y {
-            *cell_1
-        } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
-            *cell_2
-        } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
-            *cell_3
-        } else {
-            *cell_4
-        }
-    }
+    //     if cell1.point.x() == min_x && cell1.point.y() == min_y {
+    //         *cell_1
+    //     } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
+    //         *cell_2
+    //     } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
+    //         *cell_3
+    //     } else {
+    //         *cell_4
+    //     }
+    // }
 
-    /// Determines the southwestern cell amongst a grouping of 4
-    pub fn southwesternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
-        let min_x = cell1
-            .point
-            .x()
-            .min(cell2.point.x())
-            .min(cell3.point.x())
-            .min(cell4.point.x());
-        let min_y = cell1
-            .point
-            .y()
-            .min(cell2.point.y())
-            .min(cell3.point.y())
-            .min(cell4.point.y());
+    // /// Determines the southwestern cell amongst a grouping of 4
+    // pub fn southwesternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
+    //     let min_x = cell1
+    //         .point
+    //         .x()
+    //         .min(cell2.point.x())
+    //         .min(cell3.point.x())
+    //         .min(cell4.point.x());
+    //     let min_y = cell1
+    //         .point
+    //         .y()
+    //         .min(cell2.point.y())
+    //         .min(cell3.point.y())
+    //         .min(cell4.point.y());
 
-        if cell1.point.x() == min_x && cell1.point.y() == min_y {
-            *cell_1
-        } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
-            *cell_2
-        } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
-            *cell_3
-        } else {
-            *cell_4
-        }
-    }
+    //     if cell1.point.x() == min_x && cell1.point.y() == min_y {
+    //         *cell_1
+    //     } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
+    //         *cell_2
+    //     } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
+    //         *cell_3
+    //     } else {
+    //         *cell_4
+    //     }
+    // }
 
-    /// Determines the southwestern cell amongst a grouping of 4
-    pub fn southwesternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
-        let min_x = cell1
-            .point
-            .x()
-            .min(cell2.point.x())
-            .min(cell3.point.x())
-            .min(cell4.point.x());
-        let min_y = cell1
-            .point
-            .y()
-            .min(cell2.point.y())
-            .min(cell3.point.y())
-            .min(cell4.point.y());
+    // /// Determines the southwestern cell amongst a grouping of 4
+    // pub fn southwesternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
+    //     let min_x = cell1
+    //         .point
+    //         .x()
+    //         .min(cell2.point.x())
+    //         .min(cell3.point.x())
+    //         .min(cell4.point.x());
+    //     let min_y = cell1
+    //         .point
+    //         .y()
+    //         .min(cell2.point.y())
+    //         .min(cell3.point.y())
+    //         .min(cell4.point.y());
 
-        if cell1.point.x() == min_x && cell1.point.y() == min_y {
-            *cell_1
-        } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
-            *cell_2
-        } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
-            *cell_3
-        } else {
-            *cell_4
-        }
-    }
+    //     if cell1.point.x() == min_x && cell1.point.y() == min_y {
+    //         *cell_1
+    //     } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
+    //         *cell_2
+    //     } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
+    //         *cell_3
+    //     } else {
+    //         *cell_4
+    //     }
+    // }
 
-    /// Interpolate the TEC at 4 points described by provided [Rect]angle, returning a new [MapCell].
-    /// We use 4 neighboring [MapCell]s to apply the interpolation equation with the highest precision
-    /// on each corner of the [Rect]angle. This is to be used when the ROI does not align with the grid space.
-    pub fn interpolate_at_grouping4(
-        &self,
-        roi: Rect,
-        neighbor_1: &Self,
-        neighbor_2: &Self,
-        neighbor_3: &Self,
-    ) -> Result<Self, Error> {
-        let (
-            (roi_ne_lat, roi_ne_long),
-            (roi_se_lat, roi_se_long),
-            (roi_sw_lat, roi_sw_long),
-            (roi_nw_lat, roi_nw_long),
-        ) = rectangle_to_cardinals(roi);
+    // /// Interpolate the TEC at 4 points described by provided [Rect]angle, returning a new [MapCell].
+    // /// We use 4 neighboring [MapCell]s to apply the interpolation equation with the highest precision
+    // /// on each corner of the [Rect]angle. This is to be used when the ROI does not align with the grid space.
+    // pub fn interpolate_at_grouping4(
+    //     &self,
+    //     roi: Rect,
+    //     neighbor_1: &Self,
+    //     neighbor_2: &Self,
+    //     neighbor_3: &Self,
+    // ) -> Result<Self, Error> {
+    //     let (
+    //         (roi_ne_lat, roi_ne_long),
+    //         (roi_se_lat, roi_se_long),
+    //         (roi_sw_lat, roi_sw_long),
+    //         (roi_nw_lat, roi_nw_long),
+    //     ) = rectangle_to_cardinals(roi);
 
-        // determines NE, SE, NW, NE cells conveniently
-        // so we tolerate a random order (but they need to be neighboring cells)
-        let ne_cell = Self::northeasternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
-        let se_cell = Self::southasternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
-        let nw_cell = Self::northwesternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
-        let ne_cell = Self::northeasternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
+    //     // determines NE, SE, NW, NE cells conveniently
+    //     // so we tolerate a random order (but they need to be neighboring cells)
+    //     let ne_cell = Self::northeasternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
+    //     let se_cell = Self::southasternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
+    //     let nw_cell = Self::northwesternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
+    //     let ne_cell = Self::northeasternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
 
-        // verifies they are all neighboring cells
-        if !nw_cell.is_western_neighbor(ne_cell) {
-            return Err();
-        }
-        if !ne_cell.is_northern_neighbor(se_cell) {
-            return Err();
-        }
-        if !se_cell.is_eastern_neighbor(sw_cell) {
-            return Err();
-        }
-        if !nw_cell.is_northern_neighbor(sw_cell) {
-            return Err();
-        }
-    }
+    //     // verifies they are all neighboring cells
+    //     if !nw_cell.is_western_neighbor(ne_cell) {
+    //         return Err();
+    //     }
+    //     if !ne_cell.is_northern_neighbor(se_cell) {
+    //         return Err();
+    //     }
+    //     if !se_cell.is_eastern_neighbor(sw_cell) {
+    //         return Err();
+    //     }
+    //     if !nw_cell.is_northern_neighbor(sw_cell) {
+    //         return Err();
+    //     }
+    // }
 
-    /// Merges two neighboring [MapCell]s forming a new (upscaled) [MapCell].
-    /// Both cells must be synchronous.
-    pub fn merge_neighbors(&self, rhs: &Self) -> Result<Self, Error> {
-        if !self.temporal_match(rhs) {
-            return Err(Error::TemporalMismatch);
-        }
+    // /// Merges two neighboring [MapCell]s forming a new (upscaled) [MapCell].
+    // /// Both cells must be synchronous.
+    // pub fn merge_neighbors(&self, rhs: &Self) -> Result<Self, Error> {
+    //     if !self.temporal_match(rhs) {
+    //         return Err(Error::TemporalMismatch);
+    //     }
 
-        // 1: determine the matching corners. The center
-        // point of the matching line is to become the new center.
-        // 2: form a new cell, of the boundary rect, interpolate
-        // both TEC at the new center
+    //     // 1: determine the matching corners. The center
+    //     // point of the matching line is to become the new center.
+    //     // 2: form a new cell, of the boundary rect, interpolate
+    //     // both TEC at the new center
 
-        if self.is_northern_neighbor(rhs) {
-            Ok(Self::default()) // TODO
-        } else if self.is_southern_neighbor(rhs) {
-            Ok(Self::default()) // TODO
-        } else if self.is_western_neighbor(rhs) {
-            Ok(Self::default()) // TODO
-        } else if self.is_eastern_neighbor(rhs) {
-            Ok(Self::default()) // TODO
-        } else {
-            Err(Error::SpatialMismatch)
-        }
-    }
+    //     if self.is_northern_neighbor(rhs) {
+    //         Ok(Self::default()) // TODO
+    //     } else if self.is_southern_neighbor(rhs) {
+    //         Ok(Self::default()) // TODO
+    //     } else if self.is_western_neighbor(rhs) {
+    //         Ok(Self::default()) // TODO
+    //     } else if self.is_eastern_neighbor(rhs) {
+    //         Ok(Self::default()) // TODO
+    //     } else {
+    //         Err(Error::SpatialMismatch)
+    //     }
+    // }
 
     // /// Interpolates two [MapCell]s that must describe the same area,
     // /// but a different point in time.
@@ -642,25 +748,25 @@ impl MapCell {
 
     //     Ok(Self {
     //         epoch,
-    //         north_east: MapPoint {
+    //         north_east: TecPoint {
     //             point: self.north_east.point,
     //             tec: TEC::from_tecu(
     //                 num_1 * ne_1 /dt + num_2 * ne_2 /dt
     //             ),
     //         },
-    //         north_west: MapPoint {
+    //         north_west: TecPoint {
     //             point: self.north_west.point,
     //             tec: TEC::from_tecu(
     //                 num_1 * nw_1 /dt + num_2 * nw_2 /dt
     //             ),
     //         },
-    //         south_east: MapPoint {
+    //         south_east: TecPoint {
     //             point: self.south_east.point,
     //             tec: TEC::from_tecu(
     //                 num_1 * se_1 /dt + num_2 * se_2 /dt
     //             ),
     //         },
-    //         south_west: MapPoint {
+    //         south_west: TecPoint {
     //             point: self.south_west.point,
     //             tec: TEC::from_tecu(
     //                 num_1 * sw_1 /dt + num_2 * sw_2 /dt
