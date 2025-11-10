@@ -65,77 +65,6 @@ pub struct MapCell {
     pub south_west: TecPoint,
 }
 
-/// A structure holding 9 synchronous neighboring [MapCells]
-#[derive(Debug, Default, Clone, PartialEq)]
-pub struct Cell9 {
-    /// The central [MapCell]
-    pub central: MapCell,
-
-    /// 8 Neighboring [MapCells]
-    pub neighbors: HashMap<Cardinal, MapCell>,
-}
-
-impl Cell9 {
-    /// Returns true if this [Cell9] definition is "complete"
-    pub(crate) fn is_complete(&self) -> bool {
-        self.neighbors.len() == 8
-    }
-
-    /// Builds a new updated [Cell9] with updated central cell.
-    pub fn with_central_cell(mut self, center: MapCell) -> Self {
-        self.central = center;
-        self
-    }
-
-    /// Builds a new [Cell9] conveniently from 9 [MapCells], correctly
-    /// electing the central ROI, and the 8 neighbors.
-    /// Returns None if no central ROI exists or could not determine 8 neighbors.
-    pub fn from_slice(cells: [MapCell; 9]) -> Option<Self> {
-        for i in 0..9 {
-            // determine whether the ith cell is the potential center
-            let mut all_neighbors = true;
-            // must be neighbor with all other 8 ROIs
-            for j in 0..9 {
-                if j != i {
-                    if !cells[i].is_neighbor(&cells[j]) {
-                        all_neighbors = false;
-                        break;
-                    }
-                }
-            }
-
-            if all_neighbors {
-                let mut ret = Self::default().with_central_cell(cells[i]);
-
-                // i is the central ROI, order other ROIs correctly & exit
-                for j in 0..9 {
-                    if j != i {
-                        if cells[j].is_northwestern_neighbor(&cells[i]) {
-                            ret.neighbors.insert(Cardinal::NorthWest, cells[j]);
-                        } else if cells[j].is_northeastern_neighbor(&cells[i]) {
-                            ret.neighbors.insert(Cardinal::NorthEast, cells[j]);
-                        } else if cells[j].is_northern_neighbor(&cells[i]) {
-                            ret.neighbors.insert(Cardinal::North, cells[j]);
-                        } else if cells[j].is_southwestern_neighbor(&cells[i]) {
-                            ret.neighbors.insert(Cardinal::SouthWest, cells[j]);
-                        } else if cells[j].is_southeastern_neighbor(&cells[i]) {
-                            ret.neighbors.insert(Cardinal::SouthEast, cells[j]);
-                        } else if cells[j].is_southern_neighbor(&cells[i]) {
-                            ret.neighbors.insert(Cardinal::South, cells[j]);
-                        }
-                    }
-                }
-
-                if ret.is_complete() {
-                    return Some(ret);
-                }
-            }
-        }
-
-        None
-    }
-}
-
 impl MapCell {
     /// Define a new [MapCell] from 4 (latitude_ddeg, longitude_ddeg) cardinal tuples and
     /// associated TEC values.
@@ -517,6 +446,111 @@ impl MapCell {
             (1.0 - p) * (1.0 - q) * e00 + p * (1.0 - q) * e10 + q * (1.0 - p) * e01 + p * q * e11;
 
         Ok(TEC::from_tecu(tecu))
+    }
+
+    /// Returns a downscaled (resized minized) new ROI applying the interpolation equation
+    /// on each corners.
+    pub fn downscaled(&self, factor: f64) -> Result<MapCell, Error> {
+        if !factor.is_normal() {
+            return Err(Error::InvalidStretchFactor);
+        }
+
+        if factor > 1.0 {
+            return Err(Error::InvalidStretchFactor);
+        }
+
+        // apply interpolation eq. at 4 coordinates
+        let (north_east, north_west, south_east, south_west) = (
+            Point::new(
+                self.north_east.point.x() * factor,
+                self.north_east.point.y() * factor,
+            ),
+            Point::new(
+                self.north_west.point.x() * factor,
+                self.north_west.point.y() * factor,
+            ),
+            Point::new(
+                self.south_east.point.x() * factor,
+                self.south_east.point.y() * factor,
+            ),
+            Point::new(
+                self.south_west.point.x() * factor,
+                self.south_west.point.y() * factor,
+            ),
+        );
+
+        Ok(MapCell {
+            north_east: TecPoint {
+                tec: self.spatial_tec_interp(north_east),
+                point: north_east,
+            },
+            north_west: TecPoint {
+                tec: self.spatial_tec_interp(north_west),
+                point: north_west,
+            },
+            south_west: TecPoint {
+                tec: self.spatial_tec_interp(south_west),
+                point: south_west,
+            },
+            south_east: TecPoint {
+                tec: self.spatial_tec_interp(south_east),
+                point: south_east,
+            },
+        })
+    }
+
+    /// Returns a upscaled (resized upscaled) new ROI applying the interpolation equation
+    /// on each corners. This method should be used for very small stretch ratios.
+    /// For higher accuracy, you should work with a [Cell9] grouping and [Cell9::upscale]
+    /// in particular, which takes advantage of neighboring information on the map, to minimize
+    /// the error on the resulting ROI.
+    pub fn upscaled(&self, factor: f64) -> Result<MapCell, Error> {
+        if !factor.is_normal() {
+            return Err(Error::InvalidStretchFactor);
+        }
+
+        if factor < 1.0 {
+            return Err(Error::InvalidStretchFactor);
+        }
+
+        // apply interpolation eq. at 4 coordinates
+        let (north_east, north_west, south_east, south_west) = (
+            Point::new(
+                self.north_east.point.x() * factor,
+                self.north_east.point.y() * factor,
+            ),
+            Point::new(
+                self.north_west.point.x() * factor,
+                self.north_west.point.y() * factor,
+            ),
+            Point::new(
+                self.south_east.point.x() * factor,
+                self.south_east.point.y() * factor,
+            ),
+            Point::new(
+                self.south_west.point.x() * factor,
+                self.south_west.point.y() * factor,
+            ),
+        );
+
+        Ok(MapCell {
+            north_east: TecPoint {
+                tec: self.spatial_tec_interp(north_east),
+                point: north_east,
+            },
+            north_west: TecPoint {
+                tec: self.spatial_tec_interp(north_west),
+                point: north_west,
+            },
+            south_west: TecPoint {
+                tec: self.spatial_tec_interp(south_west),
+                point: south_west,
+            },
+            south_east: TecPoint {
+                tec: self.spatial_tec_interp(south_east),
+                point: south_east,
+            },
+        })
     }
 
     // /// Determines the northeastern cell amongst a grouping of 4

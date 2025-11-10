@@ -33,6 +33,7 @@ pub mod tec;
 pub mod version;
 
 mod cell;
+mod cell9;
 mod coordinates;
 mod epoch;
 mod ionosphere;
@@ -60,7 +61,8 @@ use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 use hifitime::prelude::Epoch;
 
 use crate::{
-    cell::{Cardinal, Cell9, MapCell, TecPoint},
+    cell::Cell9,
+    cell::{Cardinal, MapCell, TecPoint},
     coordinates::QuantizedCoordinates,
     error::{Error, FormattingError, ParsingError},
     file_attributes::{FileAttributes, Region},
