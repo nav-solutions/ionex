@@ -717,6 +717,8 @@ impl IONEX {
     ///    - < 1.0: downscaling
     ///    - 0.0: invalid
     pub fn spatial_stretching_mut(&mut self, axis: Axis, factor: f64) -> Result<(), Error> {
+        // the maximal factor supported for on iter is 2
+
         // Update the header specs
         match axis {
             Axis::Latitude => {
@@ -761,7 +763,13 @@ impl IONEX {
         }
 
         // synchronous spatial interpolation
-        for epoch in self.epoch_iter() {}
+        for epoch in self.epoch_iter() {
+            for cell9 in self.cell9_iter().filter(|cell| cell.epoch == epoch) {
+                if factor 1.0 {
+                } else {
+                }
+            }
+        }
 
         Ok(())
     }
@@ -771,9 +779,11 @@ impl IONEX {
         Box::new(self.record.map.keys().map(|k| k.epoch).unique().sorted())
     }
 
-    /// Iterates this [IONEX] by a group of 9 neighboring [MapCell]s,
+    /// Iterates this [IONEX] by a group of 9 synchronous neighboring [MapCell]s,
     /// which is particularly convenient for accurate interpolation and upscaling.
-    pub fn iter_cell9(&self) -> Box<dyn Iterator<Item = Cell9> + '_> {}
+    pub fn cell9_iter(&self) -> Box<dyn Iterator<Item = Cell9> + '_> {
+
+    }
 
     /// Modify the grid spacing (quantization) while preserving the dimensions,
     /// and interpolates the TEC values.
