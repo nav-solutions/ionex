@@ -7,33 +7,8 @@ use crate::{
     rectangle_to_cardinals,
 };
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum Cardinal {
-    /// NE [Cardinal]
-    NorthEast,
-
-    /// N [Cardinal]
-    North,
-
-    /// NW [Cardinal]
-    NorthWest,
-
-    /// W [Cardinal]
-    West,
-
-    /// SW [Cardinal]
-    SouthWest,
-
-    /// S [Cardinal]
-    South,
-
-    /// SE [Cardinal]
-    SouthEast,
-
-    /// E [Cardinal]
-    East,
-}
+mod three_by_three;
+pub use three_by_three::Cell3x3;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct TecPoint {
@@ -169,6 +144,11 @@ impl MapCell {
     /// Returns true if both [MapCell]s describe the same point in time
     pub fn temporal_match(&self, rhs: &Self) -> bool {
         self.epoch == rhs.epoch
+    }
+
+    /// Returns true if both [MapCell]s describe the same spatial region at the same instant.
+    pub fn spatial_temporal_match(&self, rhs: &Self) -> bool {
+        self.spatial_match(rhs) && self.temporal_match(rhs)
     }
 
     /// Returns true if self is the northern neighbor of provided (rhs) [MapCell].
@@ -355,6 +335,12 @@ impl MapCell {
         self
     }
 
+    /// Copies and updates the temporal instant
+    pub fn with_epoch(mut self, epoch: Epoch) -> Self {
+        self.epoch = epoch;
+        self
+    }
+
     /// Returns the (latitude, longitude) span of this [MapCell]
     /// as tuplet in degrees
     pub fn latitude_longitude_span_degrees(&self) -> (f64, f64) {
@@ -448,14 +434,14 @@ impl MapCell {
         Ok(TEC::from_tecu(tecu))
     }
 
-    /// Returns a downscaled (resized minized) new ROI applying the interpolation equation
-    /// on each corners.
-    pub fn downscaled(&self, factor: f64) -> Result<MapCell, Error> {
+    /// Returns a stretched (either upscaled or downscaled, resized in dimension) ROI,
+    /// by applying the interpolation equation on each corners.
+    /// Although this operation may apply to any [MapCell], for best precision
+    /// it is recommend to restrict the upscaling factor to small values (<2), otherwise,
+    /// the [Cell3x3] should be prefered and will give more accurate results, by
+    /// taking into account the neighboring cells.
+    pub fn stretching_mut(&mut self, factor: f64) -> Result<(), Error> {
         if !factor.is_normal() {
-            return Err(Error::InvalidStretchFactor);
-        }
-
-        if factor > 1.0 {
             return Err(Error::InvalidStretchFactor);
         }
 
@@ -479,78 +465,43 @@ impl MapCell {
             ),
         );
 
-        Ok(MapCell {
-            north_east: TecPoint {
-                tec: self.spatial_tec_interp(north_east),
+        let (north_east, north_west, south_east, south_west) = (
+            TecPoint {
                 point: north_east,
+                tec: self.spatial_tec_interp(north_east)?,
             },
-            north_west: TecPoint {
-                tec: self.spatial_tec_interp(north_west),
+            TecPoint {
                 point: north_west,
+                tec: self.spatial_tec_interp(north_west)?,
             },
-            south_west: TecPoint {
-                tec: self.spatial_tec_interp(south_west),
-                point: south_west,
-            },
-            south_east: TecPoint {
-                tec: self.spatial_tec_interp(south_east),
+            TecPoint {
                 point: south_east,
+                tec: self.spatial_tec_interp(south_east)?,
             },
-        })
+            TecPoint {
+                point: south_west,
+                tec: self.spatial_tec_interp(south_west)?,
+            },
+        );
+
+        self.north_east = north_east;
+        self.north_west = north_west;
+        self.south_east = south_east;
+        self.south_west = south_west;
+
+        Ok(())
     }
 
-    /// Returns a upscaled (resized upscaled) new ROI applying the interpolation equation
-    /// on each corners. This method should be used for very small stretch ratios.
-    /// For higher accuracy, you should work with a [Cell9] grouping and [Cell9::upscale]
-    /// in particular, which takes advantage of neighboring information on the map, to minimize
-    /// the error on the resulting ROI.
-    pub fn upscaled(&self, factor: f64) -> Result<MapCell, Error> {
-        if !factor.is_normal() {
-            return Err(Error::InvalidStretchFactor);
-        }
-
-        if factor < 1.0 {
-            return Err(Error::InvalidStretchFactor);
-        }
-
-        // apply interpolation eq. at 4 coordinates
-        let (north_east, north_west, south_east, south_west) = (
-            Point::new(
-                self.north_east.point.x() * factor,
-                self.north_east.point.y() * factor,
-            ),
-            Point::new(
-                self.north_west.point.x() * factor,
-                self.north_west.point.y() * factor,
-            ),
-            Point::new(
-                self.south_east.point.x() * factor,
-                self.south_east.point.y() * factor,
-            ),
-            Point::new(
-                self.south_west.point.x() * factor,
-                self.south_west.point.y() * factor,
-            ),
-        );
-
-        Ok(MapCell {
-            north_east: TecPoint {
-                tec: self.spatial_tec_interp(north_east),
-                point: north_east,
-            },
-            north_west: TecPoint {
-                tec: self.spatial_tec_interp(north_west),
-                point: north_west,
-            },
-            south_west: TecPoint {
-                tec: self.spatial_tec_interp(south_west),
-                point: south_west,
-            },
-            south_east: TecPoint {
-                tec: self.spatial_tec_interp(south_east),
-                point: south_east,
-            },
-        })
+    /// Returns a stretched (either upscaled or downscaled, resized in dimension) ROI,
+    /// by applying the interpolation equation on each corners.
+    /// Although this operation may apply to any [MapCell], for best precision
+    /// it is recommend to restrict the upscaling factor to small values (<2), otherwise,
+    /// the [Cell3x3] should be prefered and will give more accurate results, by
+    /// taking into account the neighboring cells.
+    pub fn stretched(&self, factor: f64) -> Result<MapCell, Error> {
+        let mut s = self.clone();
+        s.stretching_mut(factor)?;
+        Ok(s)
     }
 
     // /// Determines the northeastern cell amongst a grouping of 4

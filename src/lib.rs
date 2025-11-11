@@ -33,7 +33,6 @@ pub mod tec;
 pub mod version;
 
 mod cell;
-mod cell9;
 mod coordinates;
 mod epoch;
 mod ionosphere;
@@ -61,8 +60,7 @@ use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 use hifitime::prelude::Epoch;
 
 use crate::{
-    cell::Cell9,
-    cell::{Cardinal, MapCell, TecPoint},
+    cell::{Cell3x3, MapCell, TecPoint},
     coordinates::QuantizedCoordinates,
     error::{Error, FormattingError, ParsingError},
     file_attributes::{FileAttributes, Region},
@@ -78,7 +76,7 @@ pub mod prelude {
     // export
     pub use crate::{
         bias::BiasSource,
-        cell::{Cardinal, Cell9, MapCell},
+        cell::{Cell3x3, MapCell},
         error::{Error, FormattingError, ParsingError},
         file_attributes::*,
         grid::{Axis, Grid},
@@ -687,23 +685,24 @@ impl IONEX {
         Ok(s)
     }
 
-    /// Modify the grid spacing (quantization) while preserving the dimensions,
-    /// and interpolates the new TEC values.
-    ///
-    /// This only modify the grid quantization, the map dimensions are preserved.
-    ///
-    /// ## Input
-    /// - axis: [Axis] to be resampled
-    /// - factor:
-    ///    - > 1.0: spatial upscaling. The grid precision increases,
-    /// we interpolate the TEC at new intermiediate coordinates.
-    ///    - < 1.0: downscaling. The grid precision decreases.
-    ///    - 0.0: invalid
-    pub fn spatially_resampled(&self, axis: Axis, factor: f64) -> Result<IONEX, Error> {
-        let mut s = self.clone();
-        s.spatial_resampling_mut(axis, factor)?;
-        Ok(s)
-    }
+    // TODO
+    // /// Modify the grid spacing (quantization) while preserving the dimensions,
+    // /// and interpolates the new TEC values.
+    // ///
+    // /// This only modify the grid quantization, the map dimensions are preserved.
+    // ///
+    // /// ## Input
+    // /// - axis: [Axis] to be resampled
+    // /// - factor:
+    // ///    - > 1.0: spatial upscaling. The grid precision increases,
+    // /// we interpolate the TEC at new intermiediate coordinates.
+    // ///    - < 1.0: downscaling. The grid precision decreases.
+    // ///    - 0.0: invalid
+    // pub fn spatially_resampled(&self, axis: Axis, factor: f64) -> Result<IONEX, Error> {
+    //     let mut s = self.clone();
+    //     s.spatial_resampling_mut(axis, factor)?;
+    //     Ok(s)
+    // }
 
     /// Modify the grid dimensions by a positive, possibly fractional number,
     /// and interpolates the TEC values.
@@ -764,10 +763,13 @@ impl IONEX {
 
         // synchronous spatial interpolation
         for epoch in self.epoch_iter() {
-            for cell9 in self.cell9_iter().filter(|cell| cell.epoch == epoch) {
-                if factor 1.0 {
-                } else {
-                }
+            for cell3x3 in self
+                .cell3x3_iter()
+                .filter(|cell| cell.center.epoch == epoch)
+            {
+                // if factor 1.0 {
+                // } else {
+                // }
             }
         }
 
@@ -779,64 +781,63 @@ impl IONEX {
         Box::new(self.record.map.keys().map(|k| k.epoch).unique().sorted())
     }
 
-    /// Iterates this [IONEX] by a group of 9 synchronous neighboring [MapCell]s,
+    /// Iterates this [IONEX] by a 3x3 group of neighboring [MapCell]s expressed as [Cell3x3],
     /// which is particularly convenient for accurate interpolation and upscaling.
-    pub fn cell9_iter(&self) -> Box<dyn Iterator<Item = Cell9> + '_> {
+    pub fn cell3x3_iter(&self) -> Box<dyn Iterator<Item = Cell3x3> + '_> {}
 
-    }
+    // TODO
+    // /// Modify the grid spacing (quantization) while preserving the dimensions,
+    // /// and interpolates the TEC values.
+    // ///
+    // /// This only modify the grid quantization, the map dimensions are preserved.
+    // ///
+    // /// ## Input
+    // /// - axis: [Axis] to be resampled
+    // /// - factor:
+    // ///    - > 1.0: upscaling
+    // ///    - < 1.0: downscaling
+    // ///    - 0.0: invalid
+    // pub fn spatial_resampling_mut(&mut self, axis: Axis, factor: f64) -> Result<(), Error> {
+    //     // Stretch header specs
+    //     match axis {
+    //         Axis::Latitude => {
+    //             self.header.grid.latitude.resample_mut(factor)?;
+    //         },
+    //         Axis::Longitude => {
+    //             self.header.grid.longitude.resample_mut(factor)?;
+    //         },
+    //         Axis::Altitude => {
+    //             self.header.grid.altitude.resample_mut(factor)?;
+    //         },
+    //         Axis::Planar => {
+    //             self.header.grid.latitude.resample_mut(factor)?;
+    //             self.header.grid.longitude.resample_mut(factor)?;
+    //         },
+    //         Axis::All => {
+    //             self.header.grid.latitude.resample_mut(factor)?;
+    //             self.header.grid.longitude.resample_mut(factor)?;
+    //             self.header.grid.altitude.resample_mut(factor)?;
+    //         },
+    //     }
 
-    /// Modify the grid spacing (quantization) while preserving the dimensions,
-    /// and interpolates the TEC values.
-    ///
-    /// This only modify the grid quantization, the map dimensions are preserved.
-    ///
-    /// ## Input
-    /// - axis: [Axis] to be resampled
-    /// - factor:
-    ///    - > 1.0: upscaling
-    ///    - < 1.0: downscaling
-    ///    - 0.0: invalid
-    pub fn spatial_resampling_mut(&mut self, axis: Axis, factor: f64) -> Result<(), Error> {
-        // Stretch header specs
-        match axis {
-            Axis::Latitude => {
-                self.header.grid.latitude.resample_mut(factor)?;
-            },
-            Axis::Longitude => {
-                self.header.grid.longitude.resample_mut(factor)?;
-            },
-            Axis::Altitude => {
-                self.header.grid.altitude.resample_mut(factor)?;
-            },
-            Axis::Planar => {
-                self.header.grid.latitude.resample_mut(factor)?;
-                self.header.grid.longitude.resample_mut(factor)?;
-            },
-            Axis::All => {
-                self.header.grid.latitude.resample_mut(factor)?;
-                self.header.grid.longitude.resample_mut(factor)?;
-                self.header.grid.altitude.resample_mut(factor)?;
-            },
-        }
+    //     let lat_pairs = self.header.grid.latitude.quantize().tuple_windows();
+    //     let long_pairs = self.header.grid.longitude.quantize().tuple_windows();
 
-        let lat_pairs = self.header.grid.latitude.quantize().tuple_windows();
-        let long_pairs = self.header.grid.longitude.quantize().tuple_windows();
+    //     // applies the stretching
 
-        // applies the stretching
+    //     // synchronous spatial interpolation
+    //     for epoch in self.epoch_iter() {
+    //         if factor > 1.0 {
+    //             // upscaling
+    //         } else {
+    //             // downscaling
+    //         }
+    //     }
 
-        // synchronous spatial interpolation
-        for epoch in self.epoch_iter() {
-            if factor > 1.0 {
-                // upscaling
-            } else {
-                // downscaling
-            }
-        }
+    //     // saturate the possible overflows to the world map proj
 
-        // saturate the possible overflows to the world map proj
-
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     /// Upscale (upsample) or Downscale (downsample) this mutable [IONEX],
     /// modifying the stretch on the temporal axis.
@@ -973,23 +974,51 @@ impl IONEX {
         )
     }
 
-    /// Obtain a [MapCell] at specified point in time, wrapping this ROI.
-    /// The temporal instant must be within the current temporal axis.
-    /// The returned [MapCell] is a bounding rectangle, of 4 corners
-    /// correctly interpolated in space and time, than you can further manipulate.
-    /// Depending on the ROI dimensions, this is either:
-    /// - a unitary [MapCell]: the smallest region we can represent in this [IONEX].
-    /// Prefer [Self::unitary_roi_at] in this case, to not bother designing the unit [Rect].
-    /// - or the closest fitting [MapCell] (wrapping boundaries) that we could fit
-    pub fn roi_at(&self, epoch: Epoch, roi: Rect) -> Result<MapCell, Error> {
+    /// Form a possibly interpolated [MapCell] at specified point in time, wrapping this ROI.
+    /// The ROI is described by a [Geometry], which can be complex.
+    /// Unlike [Self::unitary_roi_at], the returned [MapCell] may not be a map quantization cell,
+    /// but might result of the combination of several, in case the ROI does not fit in a single quantization step.
+    ///
+    /// ## Input
+    /// - epoch: the returned cell will be synchronous to this [Epoch].
+    /// If this instant lines up with the temporal axis, the process will not involve temporal interpolation.
+    /// When the instant does not line up with the temporal axis, we will use temporal interpolation,
+    /// to deduce the most precise and correct values.
+    /// In any case, this instant must fit within the temporal axis, after the first [Epoch]
+    /// and before the last [Epoch] described in [Header].
+    ///
+    /// - roi: [Geometry] defining the local region we want to wrap (fully contained by returned cell).
+    pub fn roi_at(&self, epoch: Epoch, roi: Geometry) -> Result<MapCell, Error> {
         // determine whether this is within the temporal axis
         if epoch < self.header.epoch_of_first_map || epoch > self.header.epoch_of_last_map {
             return Err(Error::OutsideTemporalBoundaries);
         }
 
-        // determine this is within the map
-        if !self.bounding_rect_degrees().contains(&Geometry::Rect(roi)) {
+        // convert the ROI to its bounding rectangle
+        let roi = roi.bounding_rect().ok_or(Error::UndefinedBoundaries)?;
+
+        // apply the modulo operation in case provided coordinates are "incorrect".
+        // in case of worldwide ionex, this makes this operation work at all times, conveniently.
+        let roi = Rect::new(
+            coord!(x: roi.min().x, y: roi.min().y),
+            coord!(x: roi.max().x, y: roi.max().y),
+        );
+
+        // check the ROI is within the map.
+        // in case of regional IONEX, we might not be able to return
+        if !self.bounding_rect_degrees().contains(&roi) {
             return Err(Error::OutsideSpatialBoundaries);
+        }
+
+        // determine whether this lies within a single element or not
+        let mut unitary_element = true;
+
+        if roi.width() > self.header.grid.longitude.spacing {
+            unitary_element = false;
+        }
+
+        if roi.height() > self.header.grid.latitude.spacing {
+            unitary_element = false;
         }
 
         // determine whether we need temporal interpolation or not
@@ -1005,98 +1034,87 @@ impl IONEX {
             t += self.header.sampling_period;
         }
 
-        // we don't need spatial interpolation if the ROI height and width
-        // are a perfect multiple of the grid dimensions
+        // determine whether we need spatial interpolation or not.
+        // we don't need spatial interpolation when the ROI height and width
+        // perfectly line up with the IONEX grid.
         let (width, height) = (roi.width(), roi.height());
 
-        let mut needs_lat_interpolation =
-            height.rem_euclid(self.header.grid.latitude.spacing) == 0.0;
-        let mut needs_long_interpolation =
-            width.rem_euclid(self.header.grid.longitude.spacing) == 0.0;
+        let (needs_lat_interp, needs_long_interp) = (
+            height.rem_euclid(self.header.grid.latitude.spacing) == 0.0,
+            width.rem_euclid(self.header.grid.longitude.spacing) == 0.0,
+        );
 
-        let needs_spatial_interpolation = needs_lat_interpolation || needs_long_interpolation;
-        if needs_spatial_interpolation {
-            panic!("not supported yet");
+        if unitary_element {
+            // this can be reduced to a unitary MapCell
+        } else {
+            if needs_temporal_interp {
+                if needs_lat_interp || needs_long_interp {
+                    panic!("not supported yet");
+                } else {
+                }
+            } else {
+                if needs_lat_interp || needs_long_interp {
+                    panic!("not supported yet");
+                } else {
+                }
+            }
         }
 
         // TODO
         Err(Error::TemporalMismatch)
     }
 
-    /// Obtain the smallest [MapCell] (map quantization) at provided point in time
-    /// and coordinates.
+    /// Obtain the [MapCell] (smallest map ROI) at provided point in time and containing provided coordinates.
+    /// We will select the synchronous [MapCell] that contains the given coordinates.
     ///
     /// ## Input
     /// - epoch: [Epoch] that must fit within the temporal axis.
     /// If this instant aligns with the sampling rate, this process will not require temporal interpolation.
-    /// - coordinates: 2D [Point] that must lie within the map.
+    /// If the instant does not line up with the sampling rate, we will return a temporally interpolated ROI
+    /// at the specified point in time.
+    /// - contains: [Geometry] to be fully contained by the returned
     /// If the coordinates align with the grid, this process will not require spatial interpolation.
-    /// - card: [Cardinal] defining which corner these coordinates will represent in the returned [MapCell].
-    /// For example:
-    ///   - [Cardinal::NorthEast] means the northeastern component of fitted ROI [MapCell] will lie at these coordinates.
-    pub fn unitary_roi_at(
-        &self,
-        epoch: Epoch,
-        coordinates: Point<f64>,
-        card: Cardinal,
-    ) -> Result<MapCell, Error> {
-        // builds the unitary ROI (as Rect) matching those coordinates and cardinal
-        let (lat_pairs, long_pairs) = (
-            self.header.grid.latitude.quantize().tuple_windows(),
-            self.header.grid.longitude.quantize().tuple_windows(),
-        );
+    pub fn unitary_roi_at(&self, epoch: Epoch, coordinates: Point<f64>) -> Option<MapCell> {
+        // determine whether we need temporal interpolation or not
+        let mut needs_temporal_interp = true;
+        let mut t = self.header.epoch_of_first_map;
 
-        let (lat_spacing, long_spacing) = (
-            self.header.grid.latitude.spacing,
-            self.header.grid.longitude.spacing,
-        );
+        while t < self.header.epoch_of_last_map {
+            if t == epoch {
+                needs_temporal_interp = false;
+                break;
+            }
 
-        for (lat1, lat2) in lat_pairs {
-            for (long1, long2) in long_pairs.clone() {
-                let (lat1, lat2, long1, long2) = (
-                    lat1.real_value(),
-                    lat2.real_value(),
-                    long1.real_value(),
-                    long2.real_value(),
-                );
-                match card {
-                    Cardinal::NorthEast => {
-                        if lat1 == coordinates.y() && long1 == coordinates.x() {
-                            let roi =
-                                Rect::new(coord!(x: long1, y: lat1), coord!(x: long2, y: lat2));
+            t += self.header.sampling_period;
+        }
 
-                            return self.roi_at(epoch, roi);
+        let coordinates = Geometry::Point(coordinates);
+
+        if needs_temporal_interp {
+            for (t0, t1) in self.epoch_iter().tuple_windows() {
+                if t0 < epoch && t1 > epoch {
+                    for (cell0, cell1) in self
+                        .synchronous_map_cell_iter(t0)
+                        .zip(self.synchronous_map_cell_iter(t1))
+                    {
+                        if cell0.contains(&coordinates) && cell1.contains(&coordinates) {
+                            // TODO
+                            // if let Ok(interpolated) = cell0.temporally_interpolated(epoch, &cell1)? {
+                            //     return Some(interpolated);
+                            // }
                         }
-                    },
-                    Cardinal::SouthEast => {
-                        if lat1 == coordinates.y() && long1 == coordinates.x() {
-                            let roi =
-                                Rect::new(coord!(x: long1, y: lat1), coord!(x: long2, y: lat2));
-
-                            return self.roi_at(epoch, roi);
-                        }
-                    },
-                    Cardinal::SouthWest => {
-                        if lat1 == coordinates.y() && long1 == coordinates.x() {
-                            let roi =
-                                Rect::new(coord!(x: long1, y: lat1), coord!(x: long2, y: lat2));
-
-                            return self.roi_at(epoch, roi);
-                        }
-                    },
-                    Cardinal::NorthWest => {
-                        if lat1 == coordinates.y() && long1 == coordinates.x() {
-                            let roi =
-                                Rect::new(coord!(x: long1, y: lat1), coord!(x: long2, y: lat2));
-
-                            return self.roi_at(epoch, roi);
-                        }
-                    },
+                    }
+                }
+            }
+        } else {
+            for cell in self.synchronous_map_cell_iter(epoch) {
+                if cell.contains(&coordinates) {
+                    return Some(cell);
                 }
             }
         }
 
-        Err(Error::OutsideSpatialBoundaries)
+        None
     }
 
     /// Obtain the best suited [MapCell] spatially wrapping this Geometry that contains following [Geometry].
