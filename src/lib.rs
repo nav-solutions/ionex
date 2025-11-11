@@ -116,7 +116,7 @@ fn div_ceil(value: usize, divider: usize) -> usize {
 }
 
 /// Converts a geo [Rect]angle to NE, SE, SW, NW (latitude, longitude) quadruplets
-pub(crate) fn rectangle_to_cardinals(
+pub(crate) fn rectangle_quadrant_decomposition(
     rect: Rect,
 ) -> ((f64, f64), (f64, f64), (f64, f64), (f64, f64)) {
     let (min, width, height) = (rect.min(), rect.width(), rect.height());
@@ -127,6 +127,15 @@ pub(crate) fn rectangle_to_cardinals(
         (x0 + width, y0 + height),
         (x0, y0 + height),
     )
+}
+
+/// Converts a quadruplet (NE, SE, SW, NW) (latitude, longitude) coordinates to a [Rect]angle in degrees
+pub(crate) fn quadrant_to_rectangle(
+    quadrant: ((f64, f64), (f64, f64), (f64, f64), (f64, f64)),
+) -> Rect {
+    let (ne_lat, ne_long) = quadrant.0;
+    let (se_lat, se_long) = quadrant.1;
+    Rect::new(coord!(x: se_long, y: se_lat), coord!(x: ne_long, y: ne_lat))
 }
 
 /// macro to format one header line or a comment
@@ -598,11 +607,28 @@ impl IONEX {
     /// The quantization (both spatial and temporal) is preserved, only the
     /// spatial dimensions are modified by this operation.
     /// [Polygon::bounding_rect] must be defined for this operation to work correctly.
+    ///
+    /// Assuming the original map and '*' marking the complex ROI you want to draw,
+    /// the resuling IONEX is the smallest rectangle the ROI fits in, because this library
+    /// (and correct/valid IONEX) is limited to rectangles.
+    ///
+    /// origin
+    /// ----------------------------------
+    /// |       returned roi___           |
+    /// |      |       * * *  |           |
+    /// |      |    *      *  |           |
+    /// |      | * specs   *  |           |
+    /// |      | *        *   |           |
+    /// |      |  ****** *    |           |
+    /// |       ______________|           |
+    /// |---------------------------------|
     pub fn to_regional_ionex(&self, roi: Polygon) -> Result<IONEX, Error> {
         let mut ionex = IONEX::default().with_header(self.header.clone());
 
+        let boundaries = roi.bounding_rect().ok_or(Error::UndefinedBoundaries)?;
+
         // simply restrict to wrapping area
-        let roi = Geometry::Polygon(roi);
+        let roi = Geometry::Rect(boundaries);
 
         let cells = self
             .map_cell_iter()
@@ -621,6 +647,14 @@ impl IONEX {
                 ionex.attributes = Some(attributes);
             },
         }
+
+        // update header
+        ionex.header.grid.latitude.start = self.header.grid.latitude.start.min(boundaries.max().y);
+        ionex.header.grid.longitude.start =
+            self.header.grid.longitude.start.max(boundaries.min().x);
+
+        ionex.header.grid.latitude.end = self.header.grid.latitude.end.max(boundaries.min().y);
+        ionex.header.grid.longitude.end = self.header.grid.longitude.end.min(boundaries.max().x);
 
         Ok(ionex)
     }
@@ -1294,7 +1328,7 @@ impl gnss_qc_traits::Merge for IONEX {
 
 #[cfg(test)]
 mod test {
-    use crate::{div_ceil, fmt_comment, prelude::*, rectangle_to_cardinals};
+    use crate::{div_ceil, fmt_comment, prelude::*, rectangle_quadrant_decomposition};
 
     #[test]
     fn fmt_comments_singleline() {
@@ -1335,7 +1369,7 @@ mod test {
     }
 
     #[test]
-    fn rect_to_cardinals() {
+    fn rectangle_decomposition() {
         for (rect, ((lat11, long11), (lat12, long12), (lat21, long21), (lat22, long22))) in [
             (
                 Rect::new(coord!(x: -30.0, y: -30.0), coord!(x: 30.0, y: 30.0)),
@@ -1357,7 +1391,7 @@ mod test {
             ),
         ] {
             assert_eq!(
-                rectangle_to_cardinals(rect),
+                rectangle_quadrant_decomposition(rect),
                 (
                     (lat11, long11),
                     (lat12, long12),

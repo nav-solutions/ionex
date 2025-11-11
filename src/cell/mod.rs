@@ -2,10 +2,7 @@ use std::collections::HashMap;
 
 use geo::{Contains, GeodesicArea, Geometry, Point, Rect};
 
-use crate::{
-    prelude::{Epoch, Error, TEC},
-    rectangle_to_cardinals,
-};
+use crate::prelude::{Epoch, Error, TEC};
 
 mod three_by_three;
 pub use three_by_three::Cell3x3;

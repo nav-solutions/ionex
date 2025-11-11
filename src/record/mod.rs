@@ -169,14 +169,7 @@ mod test {
         let map_cells = ionex.map_cell_iter().collect::<Vec<_>>();
 
         // build from scratch
-        let record = Record::from_map_cells(
-            ionex.header.grid.altitude.start,
-            ionex.header.grid.latitude.end,
-            ionex.header.grid.latitude.start,
-            ionex.header.grid.longitude.start,
-            ionex.header.grid.longitude.end,
-            &map_cells,
-        );
+        let record = Record::from_map_cells(&map_cells, ionex.header.grid.altitude.start);
 
         // reciprocal
         assert_eq!(record, ionex.record);
@@ -193,14 +186,7 @@ mod test {
         let map_cells = ionex.map_cell_iter().collect::<Vec<_>>();
 
         // build from scratch
-        let record = Record::from_map_cells(
-            ionex.header.grid.altitude.start,
-            ionex.header.grid.latitude.end,
-            ionex.header.grid.latitude.start,
-            ionex.header.grid.longitude.start,
-            ionex.header.grid.longitude.end,
-            &map_cells,
-        );
+        let record = Record::from_map_cells(&map_cells, ionex.header.grid.altitude.start);
 
         // reciprocal
         assert_eq!(record, ionex.record);
