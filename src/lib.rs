@@ -57,7 +57,7 @@ use geo::{coord, BoundingRect, Contains, Geometry, LineString, Point, Polygon, R
 #[cfg(feature = "flate2")]
 use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 
-use hifitime::prelude::Epoch;
+use hifitime::prelude::{Epoch, TimeSeries};
 
 use crate::{
     cell::{Cell3x3, MapCell, TecPoint},
@@ -599,14 +599,19 @@ impl IONEX {
     /// spatial dimensions are modified by this operation.
     /// [Polygon::bounding_rect] must be defined for this operation to work correctly.
     pub fn to_regional_ionex(&self, roi: Polygon) -> Result<IONEX, Error> {
-        let mut ionex = IONEX::default();
+        let mut ionex = IONEX::default().with_header(self.header.clone());
 
-        let bounding_rect = roi.bounding_rect().ok_or(Error::UndefinedBoundaries)?;
+        // simply restrict to wrapping area
+        let roi = Geometry::Polygon(roi);
 
-        let (min_long, min_lat) = (bounding_rect.min().x, bounding_rect.min().y);
-        let (max_long, max_lat) = (bounding_rect.max().x, bounding_rect.max().y);
+        let cells = self
+            .map_cell_iter()
+            .filter(|cell| cell.contains(&roi))
+            .collect::<Vec<_>>();
 
-        // attributes
+        ionex.record = Record::from_map_cells(&cells, self.header.grid.altitude.start);
+
+        // update attributes
         match &self.attributes {
             Some(attributes) => {
                 ionex.attributes = Some(attributes.clone().regionalized());
@@ -617,73 +622,45 @@ impl IONEX {
             },
         }
 
-        // copy header
-        ionex.header = self.header.clone();
-
-        // upscale so the grid boundaries become a perfect multiple
-        let long_upscaling = 0.0;
-        let lat_upscaling = 0.0;
-
-        // spatial upscaling
-        ionex.spatial_stretching_mut(Axis::Latitude, lat_upscaling)?;
-        ionex.spatial_stretching_mut(Axis::Longitude, long_upscaling)?;
-
-        // simply restrict to ROI area
-        let geometry = Geometry::Polygon(roi);
-
-        let cells = self
-            .map_cell_iter()
-            .filter(|cell| cell.contains(&geometry))
-            .collect::<Vec<_>>();
-
-        ionex.record = Record::from_map_cells(
-            self.header.grid.altitude.start,
-            min_lat,
-            max_lat,
-            min_long,
-            max_long,
-            &cells,
-        );
-
         Ok(ionex)
     }
 
-    /// Modify the grid dimensions by a positive, possibly fractional number,
-    /// and interpolates the TEC values.
-    ///
-    /// This does not modify the grid quantization, only the dimensions.
-    ///
-    /// ## Input
-    /// - axis: [Axis] to be stretched
-    /// - factor:
-    ///    - > 1.0: upscaling
-    ///    - < 1.0: downscaling
-    ///    - 0.0: invalid
-    ///
-    /// Example 1: spatial upscaling
-    /// ```
-    /// use ionex::prelude::{
-    ///     IONEX,
-    ///     Axis,
-    /// };
-    ///
-    /// // grab a local dataset, upscaling hardly applies to worldwide maps..
-    /// // this example is a data/IONEX/V1/CKMG0020.22I.gz that went through a x0.5 downscale.
-    /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMR0020.22I.gz").unwrap_or_else(|e| {
-    ///     panic!("Failed to parse CKMR0020: {}", e);
-    /// });
-    ///
-    /// // spatial dimensions upscale including interpolation: upscales to worldwide dimensions
-    /// let upscaled = ionex.spatially_stretched(Axis::Planar, 2.0)
-    ///     .unwrap();
-    ///
-    /// // testbench: compares these results to the original data
-    /// ```
-    pub fn spatially_stretched(&self, axis: Axis, factor: f64) -> Result<IONEX, Error> {
-        let mut s = self.clone();
-        s.spatial_stretching_mut(axis, factor)?;
-        Ok(s)
-    }
+    // /// Modify the grid dimensions by a positive, possibly fractional number,
+    // /// and interpolates the TEC values.
+    // ///
+    // /// This does not modify the grid quantization, only the dimensions.
+    // ///
+    // /// ## Input
+    // /// - axis: [Axis] to be stretched
+    // /// - factor:
+    // ///    - > 1.0: upscaling
+    // ///    - < 1.0: downscaling
+    // ///    - 0.0: invalid
+    // ///
+    // /// Example 1: spatial upscaling
+    // /// ```
+    // /// use ionex::prelude::{
+    // ///     IONEX,
+    // ///     Axis,
+    // /// };
+    // ///
+    // /// // grab a local dataset, upscaling hardly applies to worldwide maps..
+    // /// // this example is a data/IONEX/V1/CKMG0020.22I.gz that went through a x0.5 downscale.
+    // /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMR0020.22I.gz").unwrap_or_else(|e| {
+    // ///     panic!("Failed to parse CKMR0020: {}", e);
+    // /// });
+    // ///
+    // /// // spatial dimensions upscale including interpolation: upscales to worldwide dimensions
+    // /// let upscaled = ionex.spatially_stretched(Axis::Planar, 2.0)
+    // ///     .unwrap();
+    // ///
+    // /// // testbench: compares these results to the original data
+    // /// ```
+    // pub fn spatially_stretched(&self, axis: Axis, factor: f64) -> Result<IONEX, Error> {
+    //     let mut s = self.clone();
+    //     s.spatial_stretching_mut(axis, factor)?;
+    //     Ok(s)
+    // }
 
     // TODO
     // /// Modify the grid spacing (quantization) while preserving the dimensions,
@@ -704,86 +681,91 @@ impl IONEX {
     //     Ok(s)
     // }
 
-    /// Modify the grid dimensions by a positive, possibly fractional number,
-    /// and interpolates the TEC values.
-    ///
-    /// This does not modify the grid quantization, only the dimensions.
-    ///
-    /// ## Input
-    /// - axis: [Axis] to be stretched
-    /// - factor:
-    ///    - > 1.0: upscaling
-    ///    - < 1.0: downscaling
-    ///    - 0.0: invalid
-    pub fn spatial_stretching_mut(&mut self, axis: Axis, factor: f64) -> Result<(), Error> {
-        // the maximal factor supported for on iter is 2
+    // /// Modify the grid dimensions by a positive, possibly fractional number,
+    // /// and interpolates the TEC values.
+    // ///
+    // /// This does not modify the grid quantization, only the dimensions.
+    // ///
+    // /// ## Input
+    // /// - axis: [Axis] to be stretched
+    // /// - factor:
+    // ///    - > 1.0: upscaling
+    // ///    - < 1.0: downscaling
+    // ///    - 0.0: invalid
+    // pub fn spatial_stretching_mut(&mut self, axis: Axis, factor: f64) -> Result<(), Error> {
+    //     if factor > 2.0 {
+    //         // the maximal factor supported per iter is 2
+    //         // let mut fact = factor.max(2.0);
+    //         // while fact > 1.0 {
+    //         //     self.spatial_stretching_mut(fact);
+    //         //     fact = factor /2.0;
+    //         // }
+    //         Err(Error::TemporalMismatch) // TODO
+    //     } else {
 
-        // Update the header specs
-        match axis {
-            Axis::Latitude => {
-                self.header.grid.latitude.stretch_mut(factor)?;
-            },
-            Axis::Longitude => {
-                self.header.grid.longitude.stretch_mut(factor)?;
-            },
-            Axis::Altitude => {
-                self.header.grid.altitude.stretch_mut(factor)?;
-            },
-            Axis::Planar => {
-                self.header.grid.latitude.stretch_mut(factor)?;
-                self.header.grid.longitude.stretch_mut(factor)?;
-            },
-            Axis::All => {
-                self.header.grid.latitude.stretch_mut(factor)?;
-                self.header.grid.longitude.stretch_mut(factor)?;
-                self.header.grid.altitude.stretch_mut(factor)?;
-            },
-        }
+    //         // Update header specs
+    //         match axis {
+    //             Axis::Latitude => {
+    //                 self.header.grid.latitude.stretch_mut(factor)?;
+    //             },
+    //             Axis::Longitude => {
+    //                 self.header.grid.longitude.stretch_mut(factor)?;
+    //             },
+    //             Axis::Altitude => {
+    //                 self.header.grid.altitude.stretch_mut(factor)?;
+    //             },
+    //             Axis::Planar => {
+    //                 self.header.grid.latitude.stretch_mut(factor)?;
+    //                 self.header.grid.longitude.stretch_mut(factor)?;
+    //             },
+    //             Axis::All => {
+    //                 self.header.grid.latitude.stretch_mut(factor)?;
+    //                 self.header.grid.longitude.stretch_mut(factor)?;
+    //                 self.header.grid.altitude.stretch_mut(factor)?;
+    //             },
+    //         }
 
-        // update the attributes
-        match self.attributes {
-            Some(ref mut attributes) => {
-                if self.header.grid.is_worldwide() {
-                    attributes.region = Region::Worldwide;
-                } else {
-                    attributes.region = Region::Regional;
-                }
-            },
-            None => {
-                let mut attributes = FileAttributes::default();
-                if self.header.grid.is_worldwide() {
-                    attributes.region = Region::Worldwide;
-                } else {
-                    attributes.region = Region::Regional;
-                }
+    //         // update the attributes
+    //         match self.attributes {
+    //             Some(ref mut attributes) => {
+    //                 if self.header.grid.is_worldwide() {
+    //                     attributes.region = Region::Worldwide;
+    //                 } else {
+    //                     attributes.region = Region::Regional;
+    //                 }
+    //             },
+    //             None => {
+    //                 let mut attributes = FileAttributes::default();
+    //                 if self.header.grid.is_worldwide() {
+    //                     attributes.region = Region::Worldwide;
+    //                 } else {
+    //                     attributes.region = Region::Regional;
+    //                 }
 
-                self.attributes = Some(attributes);
-            },
-        }
+    //                 self.attributes = Some(attributes);
+    //             },
+    //         }
 
-        // synchronous spatial interpolation
-        for epoch in self.epoch_iter() {
-            for cell3x3 in self
-                .cell3x3_iter()
-                .filter(|cell| cell.center.epoch == epoch)
-            {
-                // if factor 1.0 {
-                // } else {
-                // }
-            }
-        }
+    //         // synchronous spatial interpolation
+    //         for epoch in self.epoch_iter() {
+    //             for cell3x3 in self
+    //                 .map_cell3x3_iter()
+    //                 .filter(|cell| cell.center.epoch == epoch)
+    //             {
+    //                 // if factor 1.0 {
+    //                 // } else {
+    //                 // }
+    //             }
+    //         }
 
-        Ok(())
-    }
+    //         Ok(())
+    //     }
+    // }
 
     /// Returns an iterator over [Epoch]s in chronological order.
     pub fn epoch_iter(&self) -> Box<dyn Iterator<Item = Epoch> + '_> {
         Box::new(self.record.map.keys().map(|k| k.epoch).unique().sorted())
     }
-
-    /// Iterates this [IONEX] by a 3x3 group of neighboring [MapCell]s expressed as [Cell3x3],
-    /// which is particularly convenient for accurate interpolation and upscaling.
-    pub fn cell3x3_iter(&self) -> Box<dyn Iterator<Item = Cell3x3> + '_> {}
 
     // TODO
     // /// Modify the grid spacing (quantization) while preserving the dimensions,
@@ -853,50 +835,60 @@ impl IONEX {
             return Err(Error::InvalidStretchFactor);
         }
 
+        let new_dt = self.header.sampling_period * factor;
+
+        if factor > 1.0 {
+            // temporal upscaling
+        } else {
+            // temporal decimation
+        }
+
         // update header
-        self.header.sampling_period = self.header.sampling_period / factor;
+        self.header.sampling_period = new_dt;
 
-        // TODO: (t1, t2) iter
         Ok(())
     }
 
-    /// Stretchs this mutable [IONEX] both in temporal and spatial dimensions,
-    /// modifying both dimensions.
-    /// When factor > 1.0 this is an upscaling operation, when factor < 1.0,
-    /// this is a downscaling operation.
-    /// This uses both spatial and temporal interpolation to form valid data points.
-    pub fn temporal_spatial_stretching_mut(
-        &mut self,
-        temporal_factor: f64,
-        axis: Axis,
-        spatial_factor: f64,
-    ) -> Result<(), Error> {
-        self.spatial_stretching_mut(axis, spatial_factor)?;
-        self.temporal_stretching_mut(temporal_factor)?;
-        Ok(())
+    // /// Stretchs this mutable [IONEX] both in temporal and spatial dimensions,
+    // /// modifying both dimensions.
+    // /// When factor > 1.0 this is an upscaling operation, when factor < 1.0,
+    // /// this is a downscaling operation.
+    // /// This uses both spatial and temporal interpolation to form valid data points.
+    // pub fn temporal_spatial_stretching_mut(
+    //     &mut self,
+    //     temporal_factor: f64,
+    //     axis: Axis,
+    //     spatial_factor: f64,
+    // ) -> Result<(), Error> {
+    //     self.spatial_stretching_mut(axis, spatial_factor)?;
+    //     self.temporal_stretching_mut(temporal_factor)?;
+    //     Ok(())
+    // }
+
+    // /// Stretchs this [IONEX] into a new [IONEX], both temporally and spatially stretched,
+    // /// modifying both dimensions.
+    // /// When factor > 1.0 this is an upscaling operation, when factor < 1.0,
+    // /// this is a downscaling operation.
+    // /// This uses both spatial and temporal interpolation to form valid data points.
+    // pub fn temporally_spatially_stretched(
+    //     &self,
+    //     temporal_factor: f64,
+    //     axis: Axis,
+    //     spatial_factor: f64,
+    // ) -> Result<Self, Error> {
+    //     let mut s = self.clone();
+    //     s.temporal_spatial_stretching_mut(temporal_factor, axis, spatial_factor)?;
+    //     Ok(s)
+    // }
+
+    /// Produces a [TimeSeries] from this [IONEX], describing the temporal axis.
+    pub fn timeseries(&self) -> TimeSeries {
+        self.header.timeseries()
     }
 
-    /// Stretchs this [IONEX] into a new [IONEX], both temporally and spatially stretched,
-    /// modifying both dimensions.
-    /// When factor > 1.0 this is an upscaling operation, when factor < 1.0,
-    /// this is a downscaling operation.
-    /// This uses both spatial and temporal interpolation to form valid data points.
-    pub fn temporally_spatially_stretched(
-        &self,
-        temporal_factor: f64,
-        axis: Axis,
-        spatial_factor: f64,
-    ) -> Result<Self, Error> {
-        let mut s = self.clone();
-        s.temporal_spatial_stretching_mut(temporal_factor, axis, spatial_factor)?;
-        Ok(s)
-    }
-
-    /// Designs a [MapCell] iterator (micro rectangle region made of 4 local points)
-    /// that can then be interpolated.
+    /// Designs a [MapCell] iterator (micro ROI following the grid quantization)
+    /// that allows micro interpolation.
     pub fn map_cell_iter(&self) -> Box<dyn Iterator<Item = MapCell> + '_> {
-        let timeseries = self.header.timeseries();
-
         let lat_pairs = self.header.grid.latitude.quantize().tuple_windows();
         let long_pairs = self.header.grid.longitude.quantize().tuple_windows();
 
@@ -904,7 +896,7 @@ impl IONEX {
         let fixed_altitude_q = Quantized::auto_scaled(fixed_altitude_km);
 
         Box::new(
-            timeseries
+            self.timeseries()
                 .cartesian_product(lat_pairs.cartesian_product(long_pairs))
                 .filter_map(move |(epoch, ((lat1, lat2), (long1, long2)))| {
                     let northeast = Key {
@@ -973,6 +965,13 @@ impl IONEX {
                 }),
         )
     }
+
+    // /// Returns a [Cell3x3] iterator for each 3x3 region at a specific point in time
+    // pub fn synchronous_map_cell3x3_iter(&self, epoch: Epoch) -> Box<dyn Iterator<Item = Cell3x3> + '_> {
+    //     Box::new(
+    //         self.map_cell3x3_iter().filter(move |cell| cell.center.epoch == epoch)
+    //     )
+    // }
 
     /// Form a possibly interpolated [MapCell] at specified point in time, wrapping this ROI.
     /// The ROI is described by a [Geometry], which can be complex.

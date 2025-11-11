@@ -59,12 +59,14 @@ impl Record {
         ))
     }
 
-    /// Obtain [TEC] value from IONEX [Record], at specified spatial and temporal coordinates that must exist.
+    /// Obtain [TEC] (single point) from IONEX [Record], at specified spatial and temporal coordinates that must exist.
     /// This is an indexing method, not an interpolation method.  
-    /// For interpolation, use the [MapCell] API.
     pub fn get(&self, key: &Key) -> Option<&TEC> {
         self.map.get(key)
     }
+
+    /// Obtain a [MapCell] (4 single points) from IONEX [Record], at specified point in time and coordinates.
+    /// The coordinates
 
     /// Obtain mutable [TEC] reference from IONEX [Record], at specified spatial and temporal coordinates that must exist.
     /// This is an indexing method, not an interpolation method.  
@@ -73,37 +75,70 @@ impl Record {
         self.map.get_mut(key)
     }
 
-    /// Collect a IONEX [Record] from a list of [MapCell].  
-    /// NB: work in progress, not validated yet.
-    pub fn from_map_cells(
-        fixed_altitude_km: f64,
-        min_latitude_ddeg: f64,
-        max_latitude_ddeg: f64,
-        min_longitude_ddeg: f64,
-        max_longitude_ddeg: f64,
-        cells: &[MapCell],
-    ) -> Self {
-        let mut map = Default::default();
-        //let (mut new_lat, mut new_long) = (true, true);
-        //let (mut prev_lat, mut prev_long) = (0.0_f64, 0.0_f64);
+    /// Collect IONEX [Record] from a list of [MapCell]s.
+    /// This is particularly useful to reconstruct a [IONEX] file from a possibly processed
+    /// and modified slice of [MapCell]s.
+    ///
+    /// ## Input
+    /// - slice: slice of [MapCell]s that must have identical dimensions,
+    /// otherwise this operation will result in corrupt/illegal content,
+    /// and we do not verify it!
+    /// - fixed_altitude_km: the fixed altitude in kilometers,
+    /// use to represent the IONEX plane from the slice of planar [MapCell]s
+    pub fn from_map_cells(slice: &[MapCell], fixed_altitude_km: f64) -> Self {
+        let mut map = BTreeMap::<Key, TEC>::default();
 
-        // for cell in cells.iter() {
-        // SW bound is always introduced
-        // let sw_key = Key::from_decimal_degrees_km(
-        //     cell.epoch,
-        //     cell.south_west.point.y(),
-        //     cell.south_west.point.x(),
-        //     fixed_altitude_km,
-        // );
+        for cell in slice.iter() {
+            // for each cell, we can produce 4 points
+            // we take advantage of the map to avoid replicated points
+            let epoch = cell.epoch;
 
-        // SE bound is introduced for any but first cell
-        // if !new_lat {
+            let (ne_point, nw_point, sw_point, se_point) = (
+                cell.north_east.point,
+                cell.north_west.point,
+                cell.south_west.point,
+                cell.south_east.point,
+            );
 
-        // }
+            let (ne_tec, nw_tec, sw_tec, se_tec) = (
+                cell.north_east.tec,
+                cell.north_west.tec,
+                cell.south_west.tec,
+                cell.south_east.tec,
+            );
 
-        //if cell.north_east.point.y() == max_latitude {
-        //}
-        // }
+            let (ne_key, nw_key, sw_key, se_key) = (
+                Key::from_decimal_degrees_km(
+                    cell.epoch,
+                    ne_point.y(),
+                    ne_point.x(),
+                    fixed_altitude_km,
+                ),
+                Key::from_decimal_degrees_km(
+                    cell.epoch,
+                    nw_point.y(),
+                    nw_point.x(),
+                    fixed_altitude_km,
+                ),
+                Key::from_decimal_degrees_km(
+                    cell.epoch,
+                    sw_point.y(),
+                    sw_point.x(),
+                    fixed_altitude_km,
+                ),
+                Key::from_decimal_degrees_km(
+                    cell.epoch,
+                    se_point.y(),
+                    se_point.x(),
+                    fixed_altitude_km,
+                ),
+            );
+
+            map.insert(ne_key, ne_tec);
+            map.insert(nw_key, nw_tec);
+            map.insert(sw_key, sw_tec);
+            map.insert(se_key, se_tec);
+        }
 
         Self { map }
     }
