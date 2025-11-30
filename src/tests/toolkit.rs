@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use crate::{
     coordinates::QuantizedCoordinates,
-    prelude::{Epoch, Header, Key, IONEX},
+    prelude::{Epoch, Header, IONEX, Key},
 };
 
 /// Verifies two [Header]s are strictly identical
