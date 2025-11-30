@@ -1,5 +1,5 @@
 use crate::{
-    prelude::{coord, Rect, IONEX},
+    prelude::{IONEX, Rect, coord},
     tests::init_logger,
 };
 

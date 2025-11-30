@@ -8,7 +8,7 @@ homepage = "https://github.com/nav-solutions"
 repository = "https://github.com/nav-solutions/ionex"
 keywords = ["geo", "gnss", "gps", "galileo"]
 categories = ["science", "science::geo", "parsing"]
-edition = "2021"
+edition = "2024"
 readme = "README.md"
 exclude = [
     "data/*",
@@ -40,17 +40,13 @@ qc = [
 [dependencies.gnss-rs]
 git = "https://github.com/nav-solutions/gnss"
 rev = "dc4d4c2d413a3be90a3fa08a6ab29079eec13923"
-features = ["std", "domes", "cospar", "sbas"]
+features = ["std"]
 
 [dependencies.gnss-qc-traits]
 git = "https://github.com/nav-solutions/qc-traits"
 rev = "63200d41bab2efa7d10082ae43a113d360722342"
 optional = true
 features = ["html"]
-
-[dependencies.hifitime]
-version = "4.1"
-features = ["std"]
 
 [dependencies]
 geo = "0.31"
@@ -59,6 +55,7 @@ itertools = "0.14"
 log = { version = "0.4", optional = true }
 flate2 = { version = "1", optional = true }
 maud = { version = "0.26", optional = true }
+hifitime = { version = "4", features = ["std"] }
 serde = { version = "1.0", optional = true, default-features = false, features = ["derive"] }
 
 [build-dependencies]

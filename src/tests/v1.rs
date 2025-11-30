@@ -1,8 +1,8 @@
 use crate::{
-    prelude::{coord, Duration, MappingFunction, Rect, Version, IONEX},
+    prelude::{Duration, IONEX, MappingFunction, Rect, Version, coord},
     tests::{
         init_logger,
-        toolkit::{generic_comparison, generic_test, TestPoint},
+        toolkit::{TestPoint, generic_comparison, generic_test},
     },
 };
 

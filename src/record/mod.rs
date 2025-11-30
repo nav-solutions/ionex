@@ -4,7 +4,7 @@ mod parsing;
 #[cfg(feature = "qc")]
 mod qc;
 
-use std::collections::{btree_map::Iter, BTreeMap};
+use std::collections::{BTreeMap, btree_map::Iter};
 
 use itertools::Itertools;
 
@@ -50,11 +50,7 @@ impl Record {
     ) -> Box<dyn Iterator<Item = (Key, &mut TEC)> + '_> {
         Box::new(self.iter_mut().filter_map(
             move |(k, v)| {
-                if k.epoch == epoch {
-                    Some((k, v))
-                } else {
-                    None
-                }
+                if k.epoch == epoch { Some((k, v)) } else { None }
             },
         ))
     }
