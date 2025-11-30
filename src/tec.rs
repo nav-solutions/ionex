@@ -14,7 +14,7 @@ pub struct TEC {
     pub(crate) rms: Option<Quantized>,
 
     /// Altitude offset for complex 3D height map
-    height: Option<Quantized>,
+    pub(crate) height: Option<Quantized>,
 }
 
 impl std::ops::Mul<f64> for TEC {

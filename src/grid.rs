@@ -3,6 +3,25 @@ use crate::{error::ParsingError, linspace::Linspace};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Axis {
+    /// Latitude axis (y)
+    Latitude,
+
+    /// Longitude axis (x)
+    Longitude,
+
+    /// Altitude axis (z), only meaningful in true 3D IONEX
+    Altitude,
+
+    /// Latitude + Longitude axes plane
+    Planar,
+
+    /// All (Latitude + Longitude plane, and z-axis when feasible)
+    All,
+}
+
 /// [Grid] used to describe latitude, longitude
 /// and altitude linar spaces, defining the entire map.
 #[derive(Debug, Copy, Clone, Default, PartialEq, PartialOrd)]
@@ -19,15 +38,27 @@ pub struct Grid {
 }
 
 impl Grid {
-    /// Returns true if self is compatible with a 3D TEC map.
+    /// Returns true when this [Grid] is not compatible with a 3D TEC map.
+    /// That means the altitude is a single point with null width.
+    pub fn is_2d_grid(&self) -> bool {
+        self.altitude.is_single_point()
+    }
+
+    /// Returns true if this [Grid] is compatible with a 3D TEC map.
     pub fn is_3d_grid(&self) -> bool {
         !self.is_2d_grid()
     }
 
-    /// Returns true if self is not compatible with a 3D TEC map.
-    /// That means the altitude is a single point with null width.
-    pub fn is_2d_grid(&self) -> bool {
-        self.altitude.is_single_point()
+    /// Returns true if this [Grid] matches the description of a worldwide map.
+    pub fn is_worldwide(&self) -> bool {
+        let latitude_deg = self.latitude.minmax();
+        let longitude_deg = self.longitude.minmax();
+        latitude_deg == (-87.5, 87.5) && longitude_deg == (-180.0, 180.0)
+    }
+
+    /// Returns true if this [Grid] does not match the description of a worldwide map.
+    pub fn is_regional(&self) -> bool {
+        !self.is_worldwide()
     }
 
     /// Defines a new [Grid] with updated latitude space
