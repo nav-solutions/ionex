@@ -2,9 +2,12 @@ IONEX
 =====
 
 [![Rust](https://github.com/nav-solutions/ionex/actions/workflows/rust.yml/badge.svg)](https://github.com/nav-solutions/ionex/actions/workflows/rust.yml)
-[![Rust](https://github.com/nav-solutions/ionex/actions/workflows/daily.yml/badge.svg)](https://github.com/nav-solutions/ionex/actions/workflows/daily.yml)
+[![Rust](https://github.com/nav-solutions/ionex/actions/workflows/daily.yml/badge.svg)](https://github.com/nav-solutions/ionex/actions/workflows/daily.yml)  
+
+[![crates.io](https://img.shields.io/crates/v/ionex.svg)](https://crates.io/crates/ionex)
 [![crates.io](https://docs.rs/ionex/badge.svg)](https://docs.rs/ionex/)
 [![crates.io](https://img.shields.io/crates/d/ionex.svg)](https://crates.io/crates/ionex)
+[![discord server](https://img.shields.io/discord/1342922474110586910?logo=discord)](https://discord.gg/EqhEBXBmJh)
 
 [![MRSV](https://img.shields.io/badge/MSRV-1.82.0-orange?style=for-the-badge)](https://github.com/rust-lang/rust/releases/tag/1.82.0)
 [![License](https://img.shields.io/badge/license-MPL_2.0-orange?style=for-the-badge&logo=mozilla)](https://github.com/nav-solutions/ionex/blob/main/LICENSE)
