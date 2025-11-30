@@ -66,6 +66,7 @@ serde = { version = "1.0", default-features = false, features = ["derive"] }
 log = "0.4"
 criterion = "0.7"
 env_logger = "0.11"
+num-integer = "0.1"
 
 [[bench]]
 name = "parsing"
@@ -74,4 +75,3 @@ harness = false
 [[bench]]
 name = "formatting"
 harness = false
-
