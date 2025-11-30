@@ -53,10 +53,10 @@ use std::{
 
 use itertools::Itertools;
 
-use geo::{coord, BoundingRect, Geometry, LineString, Point, Polygon, Rect};
+use geo::{BoundingRect, Geometry, LineString, Point, Polygon, Rect, coord};
 
 #[cfg(feature = "flate2")]
-use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
+use flate2::{Compression as GzCompression, read::GzDecoder, write::GzEncoder};
 
 use hifitime::prelude::Epoch;
 
@@ -75,6 +75,7 @@ use crate::{
 pub mod prelude {
     // export
     pub use crate::{
+        Comments, IONEX,
         bias::BiasSource,
         cell::MapCell,
         error::{FormattingError, ParsingError},
@@ -89,13 +90,12 @@ pub mod prelude {
         system::ReferenceSystem,
         tec::TEC,
         version::Version,
-        Comments, IONEX,
     };
 
     // pub re-export
     pub use geo::{
-        algorithm::contains::Contains, coord, GeodesicArea, Geometry, LineString, Point, Polygon,
-        Rect,
+        GeodesicArea, Geometry, LineString, Point, Polygon, Rect, algorithm::contains::Contains,
+        coord,
     };
     pub use gnss::prelude::{Constellation, SV};
     pub use hifitime::{Duration, Epoch, TimeScale, TimeSeries, Unit};
@@ -859,16 +859,25 @@ mod test {
 
     #[test]
     fn fmt_wrapped_comments() {
-        for desc in ["just trying to form a very lengthy comment that will overflow since it does not fit in a single line",
-            "just trying to form a very very lengthy comment that will overflow since it does fit on three very meaningful lines. Imazdmazdpoakzdpoakzpdokpokddddddddddddddddddaaaaaaaaaaaaaaaaaaaaaaa"] {
+        for desc in [
+            "just trying to form a very lengthy comment that will overflow since it does not fit in a single line",
+            "just trying to form a very very lengthy comment that will overflow since it does fit on three very meaningful lines. Imazdmazdpoakzdpoakzpdokpokddddddddddddddddddaaaaaaaaaaaaaaaaaaaaaaa",
+        ] {
             let nb_lines = num_integer::div_ceil(desc.len(), 60);
             let comments = fmt_comment(desc);
 
             assert_eq!(comments.lines().count(), nb_lines);
 
             for line in comments.lines() {
-                assert!(line.len() >= 60, "comment line should be at least 60 byte long");
-                assert_eq!(line.find("COMMENT"), Some(60), "comment marker should located @ 60");
+                assert!(
+                    line.len() >= 60,
+                    "comment line should be at least 60 byte long"
+                );
+                assert_eq!(
+                    line.find("COMMENT"),
+                    Some(60),
+                    "comment marker should located @ 60"
+                );
             }
         }
     }

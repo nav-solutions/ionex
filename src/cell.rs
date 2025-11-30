@@ -404,7 +404,7 @@ impl MapCell {
 mod test {
     use super::*;
 
-    use crate::prelude::{Epoch, Geometry, Point, Unit, TEC};
+    use crate::prelude::{Epoch, Geometry, Point, TEC, Unit};
 
     #[test]
     fn spatial_unitary_interpolation() {
