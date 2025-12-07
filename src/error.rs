@@ -91,6 +91,30 @@ pub enum ParsingError {
     ExponentScaling,
 }
 
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("strech factor must be positive finite number")]
+    InvalidStretchFactor,
+
+    #[error("undefined ROI exterior boundaries")]
+    UndefinedBoundaries,
+
+    #[error("coordinates are outside spatial boundaries")]
+    OutsideSpatialBoundaries,
+
+    #[error("temporal coordinates outside this temporal axis")]
+    OutsideTemporalBoundaries,
+
+    #[error("both regions do not describe the same spatial ROI")]
+    SpatialMismatch,
+
+    #[error("both regions are not synchronous in time")]
+    TemporalMismatch,
+
+    #[error("invalid temporal interpolation instant")]
+    InvalidTemporalPoint,
+}
+
 /// Errors that may rise during Formatting process
 #[derive(Error, Debug)]
 pub enum FormattingError {

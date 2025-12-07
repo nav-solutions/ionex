@@ -20,6 +20,12 @@ fn parse_ckmg0020() {
     assert!(ionex.is_2d());
     assert!(!ionex.is_3d());
 
+    // worldwide boundaries
+    assert_eq!(
+        ionex.bounding_rect_degrees(),
+        Rect::new(coord!(x: -180.0, y: -87.5), coord!(x: 180.0, y: 87.5),)
+    );
+
     let testpoints = vec![
         TestPoint {
             epoch_str: "2022-01-02T00:00:00 UTC",
@@ -220,7 +226,7 @@ fn parse_ckmg0020() {
     assert_eq!(ionex.header.exponent, -1);
 
     assert_eq!(
-        ionex.map_borders_degrees(),
+        ionex.bounding_rect_degrees(),
         Rect::new(coord!(x: -180.0, y: -87.5), coord!(x: 180.0, y: 87.5))
     );
 
@@ -267,6 +273,12 @@ fn parse_jplg() {
 
     assert!(ionex.is_2d());
     assert!(!ionex.is_3d());
+
+    // worldwide boundaries
+    assert_eq!(
+        ionex.bounding_rect_degrees(),
+        Rect::new(coord!(x: -180.0, y: -87.5), coord!(x: 180.0, y: 87.5),)
+    );
 
     let testpoints = vec![
         TestPoint {

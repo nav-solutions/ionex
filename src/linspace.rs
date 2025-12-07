@@ -1,6 +1,9 @@
 use std::ops::Rem;
 
-use crate::{error::ParsingError, quantized::Quantized};
+use crate::{
+    error::{Error, ParsingError},
+    quantized::Quantized,
+};
 
 /// Quantized Linspace for iteration
 #[derive(Debug, Copy, Clone, Default, PartialEq, PartialOrd)]
@@ -65,6 +68,51 @@ impl Linspace {
     /// Returns (smallest, largest) values tuplet
     pub fn minmax(&self) -> (f64, f64) {
         (self.min(), self.max())
+    }
+
+    /// Stretch this mutable [Linspace] by a finite positive number (possibly fractional),
+    /// while preserving the initial grid quantization (point spacing).
+    /// This only modifies the [Linspace] dimensions.
+    /// To modify the sampling, use [Self::resample_mut].
+    pub fn stretch_mut(&mut self, factor: f64) -> Result<(), Error> {
+        if !factor.is_normal() {
+            return Err(Error::InvalidStretchFactor);
+        }
+        self.start *= factor;
+        self.end *= factor;
+        Ok(())
+    }
+
+    /// Stretch this [Linspace] to a new [Linspace] definition.
+    /// The streetching factor must be a finite positive (possibly fractional) number.
+    /// This preserves the initial grid quantization (point spacing) and
+    /// only affects the [Linspace] dimensions. Use [Self::resampled] to resample
+    /// the [Linspace].
+    pub fn stretched(&self, factor: f64) -> Result<Self, Error> {
+        let mut s = self.clone();
+        s.stretch_mut(factor)?;
+        Ok(s)
+    }
+
+    /// Resample this mutable [Linspace] so the point spacing is modified.
+    /// This is a multiplicative stretching factor, which must be a finite positive number (possibly fractional).
+    /// This does not modify the [Linspace] dimensions, use [Self::stretch_mut] to modify dimensions.
+    pub fn resample_mut(&mut self, factor: f64) -> Result<(), Error> {
+        if !factor.is_normal() {
+            return Err(Error::InvalidStretchFactor);
+        }
+        self.spacing *= factor;
+        Ok(())
+    }
+
+    /// Resample this [Linspace] to a new [Linspace] definition, modifying the point
+    /// spacing but preserving the initial dimensions. The resampling factor
+    /// must be a finite positive, possibly fractional number. This does not modify the dimensions,
+    /// use [Self::stretched] to modify the dimensions.
+    pub fn resampled(&self, factor: f64) -> Result<Self, Error> {
+        let mut s = self.clone();
+        s.resample_mut(factor)?;
+        Ok(s)
     }
 
     /// Builds a new Linear space
@@ -188,5 +236,75 @@ mod test {
 
         assert_eq!(linspace.length(), 10);
         assert!(!linspace.is_single_point());
+    }
+
+    #[test]
+    fn linspace_stretching() {
+        let mut linspace = Linspace::new(-180.0, 180.0, 5.0).unwrap();
+
+        linspace.stretch_mut(0.5).unwrap();
+        assert_eq!(linspace.minmax(), (-90.0, 90.0));
+        assert_eq!(
+            linspace.spacing, 5.0,
+            "linspace quantization not preserved!"
+        );
+
+        linspace.stretch_mut(0.75).unwrap();
+        assert_eq!(linspace.minmax(), (-67.5, 67.5));
+        assert_eq!(
+            linspace.spacing, 5.0,
+            "linspace quantization not preserved!"
+        );
+
+        linspace.stretch_mut(0.5).unwrap();
+        assert_eq!(linspace.minmax(), (-33.75, 33.75));
+        assert_eq!(
+            linspace.spacing, 5.0,
+            "linspace quantization not preserved!"
+        );
+
+        linspace.stretch_mut(2.0).unwrap();
+        assert_eq!(linspace.minmax(), (-67.5, 67.5));
+        assert_eq!(
+            linspace.spacing, 5.0,
+            "linspace quantization not preserved!"
+        );
+    }
+
+    #[test]
+    fn linspace_resampling() {
+        let mut linspace = Linspace::new(-180.0, 180.0, 5.0).unwrap();
+
+        linspace.resample_mut(0.5).unwrap();
+        assert_eq!(linspace.spacing, 2.5);
+        assert_eq!(
+            linspace.minmax(),
+            (-180.0, 180.0),
+            "dimensions not preserved!"
+        );
+
+        linspace.resample_mut(0.5).unwrap();
+        assert_eq!(linspace.spacing, 1.25);
+        assert_eq!(
+            linspace.minmax(),
+            (-180.0, 180.0),
+            "dimensions not preserved!"
+        );
+
+        linspace.resample_mut(2.0).unwrap();
+        assert_eq!(linspace.spacing, 2.5);
+        assert_eq!(
+            linspace.minmax(),
+            (-180.0, 180.0),
+            "dimensions not preserved!"
+        );
+
+        linspace.resample_mut(2.0).unwrap();
+        assert_eq!(linspace.spacing, 5.0);
+        assert_eq!(
+            linspace.minmax(),
+            (-180.0, 180.0),
+            "dimensions not preserved!"
+        );
     }
 }
