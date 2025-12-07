@@ -64,7 +64,7 @@ serde = { version = "1.0", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
 log = "0.4"
-criterion = "0.7"
+criterion = "0.8"
 env_logger = "0.11"
 num-integer = "0.1"
 
