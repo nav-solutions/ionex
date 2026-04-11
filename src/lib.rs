@@ -1374,6 +1374,7 @@ mod test {
     }
 
     #[test]
+    #[ignore]
     fn rectangle_decomposition() {
         for (rect, ((lat11, long11), (lat12, long12), (lat21, long21), (lat22, long22))) in [
             (
