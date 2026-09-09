@@ -111,27 +111,28 @@ fn div_ceil(value: usize, divider: usize) -> usize {
     if r == 0 { q } else { q + 1 }
 }
 
-/// Converts a geo [Rect]angle to NE, SE, SW, NW (latitude, longitude) quadruplets
+/// Converts a geo [Rect]angle (x: longitude, y: latitude) to its
+/// NE, SE, SW, NW corners as (latitude, longitude) pairs in degrees
 pub(crate) fn rectangle_quadrant_decomposition(
     rect: Rect,
 ) -> ((f64, f64), (f64, f64), (f64, f64), (f64, f64)) {
-    let (min, width, height) = (rect.min(), rect.width(), rect.height());
-    let (x0, y0) = (min.x, min.y);
+    let (min, max) = (rect.min(), rect.max());
     (
-        (x0, y0),
-        (x0 + width, y0),
-        (x0 + width, y0 + height),
-        (x0, y0 + height),
+        (max.y, max.x),
+        (min.y, max.x),
+        (min.y, min.x),
+        (max.y, min.x),
     )
 }
 
-/// Converts a quadruplet (NE, SE, SW, NW) (latitude, longitude) coordinates to a [Rect]angle in degrees
+/// Converts the NE, SE, SW, NW corners, as (latitude, longitude) pairs in degrees,
+/// to a [Rect]angle (x: longitude, y: latitude)
 pub(crate) fn quadrant_to_rectangle(
     quadrant: ((f64, f64), (f64, f64), (f64, f64), (f64, f64)),
 ) -> Rect {
     let (ne_lat, ne_long) = quadrant.0;
-    let (se_lat, se_long) = quadrant.1;
-    Rect::new(coord!(x: se_long, y: se_lat), coord!(x: ne_long, y: ne_lat))
+    let (sw_lat, sw_long) = quadrant.2;
+    Rect::new(coord!(x: sw_long, y: sw_lat), coord!(x: ne_long, y: ne_lat))
 }
 
 /// macro to format one header line or a comment
@@ -1324,7 +1325,9 @@ impl gnss_qc_traits::Merge for IONEX {
 
 #[cfg(test)]
 mod test {
-    use crate::{div_ceil, fmt_comment, prelude::*, rectangle_quadrant_decomposition};
+    use crate::{
+        div_ceil, fmt_comment, prelude::*, quadrant_to_rectangle, rectangle_quadrant_decomposition,
+    };
 
     #[test]
     fn fmt_comments_singleline() {
@@ -1375,37 +1378,19 @@ mod test {
 
     #[test]
     fn rectangle_decomposition() {
-        for (rect, ((lat11, long11), (lat12, long12), (lat21, long21), (lat22, long22))) in [
+        for (rect, corners) in [
             (
                 Rect::new(coord!(x: -30.0, y: -30.0), coord!(x: 30.0, y: 30.0)),
-                (
-                    (-30.0, -30.0),
-                    (-30.0, -30.0),
-                    (-30.0, -30.0),
-                    (-30.0, -30.0),
-                ),
+                ((30.0, 30.0), (-30.0, 30.0), (-30.0, -30.0), (30.0, -30.0)),
             ),
             (
                 Rect::new(coord!(x: -40.0, y: -40.0), coord!(x: 40.0, y: 50.0)),
-                (
-                    (-30.0, -30.0),
-                    (-30.0, -30.0),
-                    (-30.0, -30.0),
-                    (-30.0, -30.0),
-                ),
+                ((50.0, 40.0), (-40.0, 40.0), (-40.0, -40.0), (50.0, -40.0)),
             ),
         ] {
-            assert_eq!(
-                rectangle_quadrant_decomposition(rect),
-                (
-                    (lat11, long11),
-                    (lat12, long12),
-                    (lat21, long21),
-                    (lat22, long22)
-                ),
-                "failed for {:?}",
-                rect
-            );
+            let (ne, se, sw, nw) = rectangle_quadrant_decomposition(rect);
+            assert_eq!((ne, se, sw, nw), corners, "failed for {:?}", rect);
+            assert_eq!(quadrant_to_rectangle((ne, se, sw, nw)), rect);
         }
     }
 }

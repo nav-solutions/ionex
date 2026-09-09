@@ -389,6 +389,10 @@ Contact Address:  gpsiono@cobra.jpl.nasa.gov ."
         panic!("failed to parse back JPLG V1: {}", e);
     });
 
+    // station and satellite counts are written back
+    assert_eq!(parsed.header.num_stations, 170);
+    assert_eq!(parsed.header.num_satellites, 31);
+
     // rerun testbench
     generic_test(&parsed, &testpoints);
 

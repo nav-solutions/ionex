@@ -139,6 +139,23 @@ impl Header {
             )
         )?;
 
+        // number of stations and satellites (when known)
+        if self.num_stations > 0 {
+            writeln!(
+                w,
+                "{}",
+                fmt_ionex(&format!("{:6}", self.num_stations), "# OF STATIONS")
+            )?;
+        }
+
+        if self.num_satellites > 0 {
+            writeln!(
+                w,
+                "{}",
+                fmt_ionex(&format!("{:6}", self.num_satellites), "# OF SATELLITES")
+            )?;
+        }
+
         // mapping function
         writeln!(
             w,

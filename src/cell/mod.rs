@@ -305,7 +305,16 @@ impl MapCell {
     /// Returns true if following [Geometry], expressed in decimal degrees,
     /// is contained within this [MapCell].
     pub fn contains(&self, geometry: &Geometry<f64>) -> bool {
-        self.bounding_rect_degrees().contains(geometry)
+        let rect = self.bounding_rect_degrees();
+        match geometry {
+            // the cell is closed: its corners and edges belong to it
+            // (geo::Rect only contains its interior)
+            Geometry::Point(point) => {
+                let (min, max) = (rect.min(), rect.max());
+                point.x() >= min.x && point.x() <= max.x && point.y() >= min.y && point.y() <= max.y
+            },
+            geometry => rect.contains(geometry),
+        }
     }
 
     /// Copies and updates the Northeastern TEC component
@@ -373,7 +382,7 @@ impl MapCell {
     ///
     /// // central point
     /// let center = Point::new(0.5, 0.5);
-    /// let tec = cell.spatial_tec_interp(center);
+    /// let tec = cell.spatial_tec_interp(center).unwrap();
     /// assert_eq!(tec.tecu(), 1.0);
     /// ```
     ///
@@ -394,19 +403,19 @@ impl MapCell {
     /// let cell = MapCell::from_unitary_tec(t0, gradient.0, gradient.1, gradient.2, gradient.3);
     ///
     /// // central point
-    /// let tec = cell.spatial_tec_interp(Point::new(0.5, 0.5));
+    /// let tec = cell.spatial_tec_interp(Point::new(0.5, 0.5)).unwrap();
     /// assert_eq!(tec.tecu(), 0.25);
     ///
     /// // SW boundary
-    /// let tec = cell.spatial_tec_interp(Point::new(0.0, 0.0));
+    /// let tec = cell.spatial_tec_interp(Point::new(0.0, 0.0)).unwrap();
     /// assert_eq!(tec.tecu(), 1.0);
     ///
     /// // SWern point
-    /// let tec = cell.spatial_tec_interp(Point::new(0.1, 0.1));
+    /// let tec = cell.spatial_tec_interp(Point::new(0.1, 0.1)).unwrap();
     /// assert_eq!(tec.tecu(), 0.81);
     ///
     /// // SWwern point
-    /// let tec = cell.spatial_tec_interp(Point::new(0.01, 0.01));
+    /// let tec = cell.spatial_tec_interp(Point::new(0.01, 0.01)).unwrap();
     /// assert_eq!(tec.tecu(), 0.9801);
     /// ```
     pub fn spatial_tec_interp(&self, point: Point<f64>) -> Result<TEC, Error> {
@@ -763,7 +772,7 @@ impl MapCell {
     /// for the results to be correct, but this is not verified here: it is up to you
     /// to use valid coordinates here.
     /// Proposed [Epoch] should lie within both observation instants, otherwise this method
-    /// returns None.
+    /// returns an error.
     ///
     /// ```
     /// use ionex::prelude::{MapCell, Epoch, Point, TEC, Unit};
@@ -781,16 +790,16 @@ impl MapCell {
     /// let cell1 = MapCell::from_unitary_tec(t1, one_tec, one_tec, one_tec, one_tec);
     ///
     /// // verify central point value
-    /// let central_tec0 = cell0.spatial_tec_interp(center);
+    /// let central_tec0 = cell0.spatial_tec_interp(center).unwrap();
     /// assert_eq!(central_tec0.tecu(), 1.0);
     ///
     /// // verify central point value
-    /// let central_tec1 = cell1.spatial_tec_interp(center);
+    /// let central_tec1 = cell1.spatial_tec_interp(center).unwrap();
     /// assert_eq!(central_tec1.tecu(), 1.0);
     ///
     /// // spatial + temporal interpolation
     /// // <!> outside sampling interval
-    /// assert!(cell0.temporal_spatial_tec_interp(t_nok, center, &cell1).is_none());
+    /// assert!(cell0.temporal_spatial_tec_interp(t_nok, center, &cell1).is_err());
     ///
     /// // spatial + temporal interpolation
     /// let tec = cell0.temporal_spatial_tec_interp(t_ok, center, &cell1).unwrap();
