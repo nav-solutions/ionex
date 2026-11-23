@@ -89,6 +89,9 @@ pub enum ParsingError {
 
     #[error("scaling parsing issue")]
     ExponentScaling,
+
+    #[error("invalid map dimension (should be 2 or 3)")]
+    MapDimension,
 }
 
 #[derive(Error, Debug)]
@@ -113,6 +116,18 @@ pub enum Error {
 
     #[error("invalid temporal interpolation instant")]
     InvalidTemporalPoint,
+
+    #[error("missing data (omitted TEC values) at these coordinates")]
+    MissingData,
+
+    #[error("altitude must be specified on 3D maps")]
+    AltitudeRequired,
+
+    #[error("elevation angle must be within [0, 90]°")]
+    InvalidElevation,
+
+    #[error("grid spacing must divide the map dimensions")]
+    InvalidGridSpacing,
 }
 
 /// Errors that may rise during Formatting process

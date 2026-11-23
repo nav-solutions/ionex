@@ -1,18 +1,22 @@
-use std::collections::HashMap;
-
 use geo::{Contains, GeodesicArea, Geometry, Point, Rect};
 
-use crate::prelude::{Epoch, Error, TEC};
+use crate::{
+    prelude::{Epoch, Error, TEC},
+    quantized::Quantized,
+};
 
 mod three_by_three;
 pub use three_by_three::Cell3x3;
 
+/// [TecPoint] is a [TEC] estimate at given coordinates.
+/// Like everywhere in this library (and the [geo] crate), the [Point]
+/// is expressed in decimal degrees, with x = longitude and y = latitude.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct TecPoint {
     /// TEC
     pub tec: TEC,
 
-    /// [Point]
+    /// [Point] (x: longitude, y: latitude) in decimal degrees
     pub point: Point<f64>,
 }
 
@@ -51,22 +55,23 @@ impl MapCell {
         southwest_ddeg: (f64, f64),
         southwest_tec: TEC,
     ) -> Self {
+        // geo convention: x = longitude, y = latitude
         Self {
             epoch,
             north_east: TecPoint {
-                point: Point::new(northeast_ddeg.0, northeast_ddeg.1),
+                point: Point::new(northeast_ddeg.1, northeast_ddeg.0),
                 tec: northeast_tec,
             },
             north_west: TecPoint {
-                point: Point::new(northwest_ddeg.0, northwest_ddeg.1),
+                point: Point::new(northwest_ddeg.1, northwest_ddeg.0),
                 tec: northwest_tec,
             },
             south_east: TecPoint {
-                point: Point::new(southeast_ddeg.0, southeast_ddeg.1),
+                point: Point::new(southeast_ddeg.1, southeast_ddeg.0),
                 tec: southeast_tec,
             },
             south_west: TecPoint {
-                point: Point::new(southwest_ddeg.0, southwest_ddeg.1),
+                point: Point::new(southwest_ddeg.1, southwest_ddeg.0),
                 tec: southwest_tec,
             },
         }
@@ -85,25 +90,17 @@ impl MapCell {
         southwest_rad: (f64, f64),
         southwest_tec: TEC,
     ) -> Self {
-        Self {
+        Self::from_lat_long_degrees(
             epoch,
-            north_east: TecPoint {
-                point: Point::new(northeast_rad.0.to_degrees(), northeast_rad.1.to_degrees()),
-                tec: northeast_tec,
-            },
-            north_west: TecPoint {
-                point: Point::new(northwest_rad.0.to_degrees(), northwest_rad.1.to_degrees()),
-                tec: northwest_tec,
-            },
-            south_east: TecPoint {
-                point: Point::new(southeast_rad.0.to_degrees(), southeast_rad.1.to_degrees()),
-                tec: southeast_tec,
-            },
-            south_west: TecPoint {
-                point: Point::new(southwest_rad.0.to_degrees(), southwest_rad.1.to_degrees()),
-                tec: southwest_tec,
-            },
-        }
+            (northeast_rad.0.to_degrees(), northeast_rad.1.to_degrees()),
+            northeast_tec,
+            (northwest_rad.0.to_degrees(), northwest_rad.1.to_degrees()),
+            northwest_tec,
+            (southeast_rad.0.to_degrees(), southeast_rad.1.to_degrees()),
+            southeast_tec,
+            (southwest_rad.0.to_degrees(), southwest_rad.1.to_degrees()),
+            southwest_tec,
+        )
     }
 
     /// Define a new [MapCell] from all 4 [TecPoint]s describing each corner at this [Epoch].
@@ -150,45 +147,54 @@ impl MapCell {
 
     /// Returns true if self is the northern neighbor of provided (rhs) [MapCell].
     pub fn is_northern_neighbor(&self, rhs: &Self) -> bool {
-        rhs.north_east.point == self.south_east.point
-            && rhs.north_west.point == self.south_west.point
+        self.south_east.point == rhs.north_east.point
+            && self.south_west.point == rhs.north_west.point
     }
 
+    /// Returns true if self is the northwestern (diagonal) neighbor of provided (rhs) [MapCell],
+    /// meaning they only share self's southeastern corner.
     pub fn is_northwestern_neighbor(&self, rhs: &Self) -> bool {
-        false // TODO
+        self.south_east.point == rhs.north_west.point
     }
 
+    /// Returns true if self is the northeastern (diagonal) neighbor of provided (rhs) [MapCell],
+    /// meaning they only share self's southwestern corner.
     pub fn is_northeastern_neighbor(&self, rhs: &Self) -> bool {
-        false // TODO
+        self.south_west.point == rhs.north_east.point
     }
 
     /// Returns true if self is the southern neighbor of provided (rhs) [MapCell].
     pub fn is_southern_neighbor(&self, rhs: &Self) -> bool {
-        rhs.south_east.point == self.north_east.point
-            && rhs.south_west.point == self.north_west.point
+        self.north_east.point == rhs.south_east.point
+            && self.north_west.point == rhs.south_west.point
     }
 
+    /// Returns true if self is the southeastern (diagonal) neighbor of provided (rhs) [MapCell],
+    /// meaning they only share self's northwestern corner.
     pub fn is_southeastern_neighbor(&self, rhs: &Self) -> bool {
-        false // TODO
+        self.north_west.point == rhs.south_east.point
     }
 
+    /// Returns true if self is the southwestern (diagonal) neighbor of provided (rhs) [MapCell],
+    /// meaning they only share self's northeastern corner.
     pub fn is_southwestern_neighbor(&self, rhs: &Self) -> bool {
-        false // TODO
+        self.north_east.point == rhs.south_west.point
     }
 
-    /// Returns true if self is the easthern neighbor of provided (rhs) [MapCell].
+    /// Returns true if self is the eastern neighbor of provided (rhs) [MapCell].
     pub fn is_eastern_neighbor(&self, rhs: &Self) -> bool {
-        rhs.north_west.point == self.north_east.point
-            && rhs.south_west.point == self.south_east.point
+        self.north_west.point == rhs.north_east.point
+            && self.south_west.point == rhs.south_east.point
     }
 
-    /// Returns true if self is the westhern neighbor of provided (rhs) [MapCell].
+    /// Returns true if self is the western neighbor of provided (rhs) [MapCell].
     pub fn is_western_neighbor(&self, rhs: &Self) -> bool {
-        rhs.north_east.point == self.north_west.point
-            && rhs.south_east.point == self.south_west.point
+        self.north_east.point == rhs.north_west.point
+            && self.south_east.point == rhs.south_west.point
     }
 
-    /// Returns true if both cells are neighbors, meaning, they share two corners.
+    /// Returns true if both cells are neighbors, meaning they share
+    /// either an edge (N, S, E, W) or a corner (NE, NW, SE, SW).
     pub fn is_neighbor(&self, rhs: &Self) -> bool {
         self.is_northern_neighbor(rhs)
             || self.is_northwestern_neighbor(rhs)
@@ -235,13 +241,14 @@ impl MapCell {
         southeast_tec: TEC,
         southwest_tec: TEC,
     ) -> Self {
+        // (latitude, longitude) tuples
         Self::from_lat_long_degrees(
             epoch,
             (1.0, 1.0),
             northeast_tec,
-            (0.0, 1.0),
-            northwest_tec,
             (1.0, 0.0),
+            northwest_tec,
+            (0.0, 1.0),
             southeast_tec,
             (0.0, 0.0),
             southwest_tec,
@@ -365,10 +372,76 @@ impl MapCell {
         borders.max().x - borders.min().x
     }
 
-    /// Spatial interpolation of the [TEC] value using planery equation
-    /// and 4 boundaries of this [MapCell]. [MapCell::contains] should be true
-    /// for the proposed geometry for this to be correct.
-    /// This method does not verify this assertion, it is up to you to use valid coordinates here.
+    /// Returns the (p, q) normalized coordinates of this [Point] within this [MapCell],
+    /// as used in the IONEX bilinear interpolation formula:
+    /// - p: normalized longitude offset from the western edge (0: West, 1: East)
+    /// - q: normalized latitude offset from the southern edge (0: South, 1: North)
+    ///
+    /// Both are within [0, 1] when the point is contained in this [MapCell].
+    pub fn normalized_coordinates(&self, point: Point<f64>) -> (f64, f64) {
+        let rect = self.bounding_rect_degrees();
+        let (min, (dlon, dlat)) = (rect.min(), (rect.width(), rect.height()));
+
+        let p = if dlon > 0.0 {
+            (point.x() - min.x) / dlon
+        } else {
+            0.0
+        };
+
+        let q = if dlat > 0.0 {
+            (point.y() - min.y) / dlat
+        } else {
+            0.0
+        };
+
+        (p, q)
+    }
+
+    /// Applies the bilinear interpolation formula at these coordinates,
+    /// without verifying they are contained by this [MapCell] (may extrapolate).
+    /// RMS is interpolated as well when defined on all 4 corners.
+    fn bilinear(&self, point: Point<f64>) -> TEC {
+        let (p, q) = self.normalized_coordinates(point);
+
+        let (w00, w10, w01, w11) = (
+            (1.0 - p) * (1.0 - q), // SW
+            p * (1.0 - q),         // SE
+            (1.0 - p) * q,         // NW
+            p * q,                 // NE
+        );
+
+        let tecu = w00 * self.south_west.tec.tecu()
+            + w10 * self.south_east.tec.tecu()
+            + w01 * self.north_west.tec.tecu()
+            + w11 * self.north_east.tec.tecu();
+
+        let mut tec = TEC::from_tecu(tecu);
+
+        if let (Some(rms00), Some(rms10), Some(rms01), Some(rms11)) = (
+            self.south_west.tec.root_mean_square(),
+            self.south_east.tec.root_mean_square(),
+            self.north_west.tec.root_mean_square(),
+            self.north_east.tec.root_mean_square(),
+        ) {
+            tec.rms = Some(Quantized::auto_scaled(
+                w00 * rms00 + w10 * rms10 + w01 * rms01 + w11 * rms11,
+            ));
+        }
+
+        tec
+    }
+
+    /// Spatial interpolation of the [TEC] value at given coordinates
+    /// (x: longitude, y: latitude in decimal degrees), using the 4 corners of this [MapCell]
+    /// and the bilinear interpolation formula recommended by the IONEX specifications:
+    ///
+    /// E(p, q) = (1-p)(1-q) E_sw + p(1-q) E_se + (1-p)q E_nw + pq E_ne
+    ///
+    /// where p (resp. q) is the normalized longitude (resp. latitude) offset
+    /// from the SW corner (see [Self::normalized_coordinates]).
+    /// The TEC RMS is interpolated as well, when it is defined on all 4 corners.
+    ///
+    /// Returns [Error::OutsideSpatialBoundaries] if the point is not contained by this [MapCell].
     ///
     /// Example: unitary cell
     /// ```
@@ -386,21 +459,21 @@ impl MapCell {
     /// assert_eq!(tec.tecu(), 1.0);
     /// ```
     ///
-    /// Example: North East gradient
+    /// Example: South West gradient
     /// ```
     /// use ionex::prelude::{MapCell, Epoch, Point, TEC, Unit};
     ///
     /// // create unitary cell with simple values
     /// let t0 = Epoch::default();
     ///
-    /// let gradient = (
+    /// let (ne, nw, se, sw) = (
     ///     TEC::from_tecu(0.0),
     ///     TEC::from_tecu(0.0),
     ///     TEC::from_tecu(0.0),
     ///     TEC::from_tecu(1.0),
     /// );
     ///
-    /// let cell = MapCell::from_unitary_tec(t0, gradient.0, gradient.1, gradient.2, gradient.3);
+    /// let cell = MapCell::from_unitary_tec(t0, ne, nw, se, sw);
     ///
     /// // central point
     /// let tec = cell.spatial_tec_interp(Point::new(0.5, 0.5)).unwrap();
@@ -412,81 +485,87 @@ impl MapCell {
     ///
     /// // SWern point
     /// let tec = cell.spatial_tec_interp(Point::new(0.1, 0.1)).unwrap();
-    /// assert_eq!(tec.tecu(), 0.81);
+    /// assert!((tec.tecu() - 0.81).abs() < 1E-9);
+    /// ```
     ///
-    /// // SWwern point
-    /// let tec = cell.spatial_tec_interp(Point::new(0.01, 0.01)).unwrap();
-    /// assert_eq!(tec.tecu(), 0.9801);
+    /// Example: real IONEX cell (x: longitude, y: latitude)
+    /// ```
+    /// use ionex::prelude::{MapCell, Epoch, Point, TEC};
+    ///
+    /// let t0 = Epoch::default();
+    ///
+    /// // (latitude, longitude) corners
+    /// let cell = MapCell::from_lat_long_degrees(
+    ///     t0,
+    ///     (45.0, 10.0), TEC::from_tecu(40.0), // NE
+    ///     (45.0, 5.0), TEC::from_tecu(30.0), // NW
+    ///     (42.5, 10.0), TEC::from_tecu(20.0), // SE
+    ///     (42.5, 5.0), TEC::from_tecu(10.0), // SW
+    /// );
+    ///
+    /// // grid nodes are preserved
+    /// let tec = cell.spatial_tec_interp(Point::new(10.0, 42.5)).unwrap();
+    /// assert_eq!(tec.tecu(), 20.0);
+    ///
+    /// // center of the cell
+    /// let tec = cell.spatial_tec_interp(Point::new(7.5, 43.75)).unwrap();
+    /// assert_eq!(tec.tecu(), 25.0);
+    ///
+    /// // outside of the cell
+    /// assert!(cell.spatial_tec_interp(Point::new(11.0, 43.0)).is_err());
     /// ```
     pub fn spatial_tec_interp(&self, point: Point<f64>) -> Result<TEC, Error> {
         if !self.contains(&Geometry::Point(point)) {
             return Err(Error::OutsideSpatialBoundaries);
         }
 
-        let (latitude_span, longitude_span) = self.latitude_longitude_span_degrees();
-
-        let (p, q) = (point.y() / latitude_span, point.x() / longitude_span);
-
-        let (e00, e10, e01, e11) = (
-            self.south_west.tec.tecu(),
-            self.south_east.tec.tecu(),
-            self.north_west.tec.tecu(),
-            self.north_east.tec.tecu(),
-        );
-
-        let tecu =
-            (1.0 - p) * (1.0 - q) * e00 + p * (1.0 - q) * e10 + q * (1.0 - p) * e01 + p * q * e11;
-
-        Ok(TEC::from_tecu(tecu))
+        Ok(self.bilinear(point))
     }
 
-    /// Returns a stretched (either upscaled or downscaled, resized in dimension) ROI,
-    /// by applying the interpolation equation on each corners.
-    /// Although this operation may apply to any [MapCell], for best precision
-    /// it is recommend to restrict the upscaling factor to small values (<2), otherwise,
-    /// the [Cell3x3] should be prefered and will give more accurate results, by
-    /// taking into account the neighboring cells.
+    /// Stretches (resizes) this [MapCell] around its center, by applying
+    /// the bilinear interpolation formula on each new corner.
+    ///
+    /// - factor < 1.0: the cell shrinks (interpolation).
+    /// - factor > 1.0: the cell grows. The new corners are outside the original
+    ///   cell so this is an extrapolation: for best precision, keep the factor small (<2)
+    ///   or prefer using the actual neighboring cells.
     pub fn stretching_mut(&mut self, factor: f64) -> Result<(), Error> {
-        if !factor.is_normal() {
+        if !factor.is_normal() || factor < 0.0 {
             return Err(Error::InvalidStretchFactor);
         }
 
-        // apply interpolation eq. at 4 coordinates
+        let center = self.center();
+
+        let stretch = |point: Point<f64>| {
+            Point::new(
+                center.x() + (point.x() - center.x()) * factor,
+                center.y() + (point.y() - center.y()) * factor,
+            )
+        };
+
         let (north_east, north_west, south_east, south_west) = (
-            Point::new(
-                self.north_east.point.x() * factor,
-                self.north_east.point.y() * factor,
-            ),
-            Point::new(
-                self.north_west.point.x() * factor,
-                self.north_west.point.y() * factor,
-            ),
-            Point::new(
-                self.south_east.point.x() * factor,
-                self.south_east.point.y() * factor,
-            ),
-            Point::new(
-                self.south_west.point.x() * factor,
-                self.south_west.point.y() * factor,
-            ),
+            stretch(self.north_east.point),
+            stretch(self.north_west.point),
+            stretch(self.south_east.point),
+            stretch(self.south_west.point),
         );
 
         let (north_east, north_west, south_east, south_west) = (
             TecPoint {
                 point: north_east,
-                tec: self.spatial_tec_interp(north_east)?,
+                tec: self.bilinear(north_east),
             },
             TecPoint {
                 point: north_west,
-                tec: self.spatial_tec_interp(north_west)?,
+                tec: self.bilinear(north_west),
             },
             TecPoint {
                 point: south_east,
-                tec: self.spatial_tec_interp(south_east)?,
+                tec: self.bilinear(south_east),
             },
             TecPoint {
                 point: south_west,
-                tec: self.spatial_tec_interp(south_west)?,
+                tec: self.bilinear(south_west),
             },
         );
 
@@ -498,273 +577,94 @@ impl MapCell {
         Ok(())
     }
 
-    /// Returns a stretched (either upscaled or downscaled, resized in dimension) ROI,
-    /// by applying the interpolation equation on each corners.
-    /// Although this operation may apply to any [MapCell], for best precision
-    /// it is recommend to restrict the upscaling factor to small values (<2), otherwise,
-    /// the [Cell3x3] should be prefered and will give more accurate results, by
-    /// taking into account the neighboring cells.
+    /// Returns a stretched (resized) copy of this [MapCell].
+    /// See [Self::stretching_mut] for more information.
     pub fn stretched(&self, factor: f64) -> Result<MapCell, Error> {
         let mut s = self.clone();
         s.stretching_mut(factor)?;
         Ok(s)
     }
 
-    // /// Determines the northeastern cell amongst a grouping of 4
-    // pub fn northeasternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
-    //     let min_x = cell1
-    //         .point
-    //         .x()
-    //         .min(cell2.point.x())
-    //         .min(cell3.point.x())
-    //         .min(cell4.point.x());
-    //     let min_y = cell1
-    //         .point
-    //         .y()
-    //         .min(cell2.point.y())
-    //         .min(cell3.point.y())
-    //         .min(cell4.point.y());
+    /// Linear interpolation weights (w_self, w_rhs) at this [Epoch], between self and rhs.
+    fn temporal_weights(&self, epoch: Epoch, rhs: &Self) -> Result<(f64, f64), Error> {
+        let (min_t, max_t) = if self.epoch <= rhs.epoch {
+            (self.epoch, rhs.epoch)
+        } else {
+            (rhs.epoch, self.epoch)
+        };
 
-    //     if cell1.point.x() == min_x && cell1.point.y() == min_y {
-    //         *cell_1
-    //     } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
-    //         *cell_2
-    //     } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
-    //         *cell_3
-    //     } else {
-    //         *cell_4
-    //     }
-    // }
+        if epoch < min_t || epoch > max_t {
+            return Err(Error::TemporalMismatch);
+        }
 
-    // /// Determines the northwestern cell amongst a grouping of 4
-    // pub fn northeasternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
-    //     let min_x = cell1
-    //         .point
-    //         .x()
-    //         .min(cell2.point.x())
-    //         .min(cell3.point.x())
-    //         .min(cell4.point.x());
-    //     let min_y = cell1
-    //         .point
-    //         .y()
-    //         .min(cell2.point.y())
-    //         .min(cell3.point.y())
-    //         .min(cell4.point.y());
+        let dt = (rhs.epoch - self.epoch).to_seconds();
 
-    //     if cell1.point.x() == min_x && cell1.point.y() == min_y {
-    //         *cell_1
-    //     } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
-    //         *cell_2
-    //     } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
-    //         *cell_3
-    //     } else {
-    //         *cell_4
-    //     }
-    // }
+        if dt == 0.0 {
+            return Ok((1.0, 0.0));
+        }
 
-    // /// Determines the southwestern cell amongst a grouping of 4
-    // pub fn southwesternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
-    //     let min_x = cell1
-    //         .point
-    //         .x()
-    //         .min(cell2.point.x())
-    //         .min(cell3.point.x())
-    //         .min(cell4.point.x());
-    //     let min_y = cell1
-    //         .point
-    //         .y()
-    //         .min(cell2.point.y())
-    //         .min(cell3.point.y())
-    //         .min(cell4.point.y());
+        let w_rhs = (epoch - self.epoch).to_seconds() / dt;
+        Ok((1.0 - w_rhs, w_rhs))
+    }
 
-    //     if cell1.point.x() == min_x && cell1.point.y() == min_y {
-    //         *cell_1
-    //     } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
-    //         *cell_2
-    //     } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
-    //         *cell_3
-    //     } else {
-    //         *cell_4
-    //     }
-    // }
+    /// Interpolates two [MapCell]s that must describe the same spatial ROI,
+    /// at a different point in time, returning a new [MapCell] at the desired instant.
+    /// Each corner is linearly interpolated in time.
+    ///
+    /// ## Input
+    /// - epoch: [Epoch] of interpolation, must be within both [MapCell]s instants.
+    /// - rhs: the other [MapCell]
+    ///
+    /// ```
+    /// use ionex::prelude::{MapCell, Epoch, TEC, Unit};
+    ///
+    /// let t0 = Epoch::default();
+    /// let t1 = t0 + 1.0 * Unit::Hour;
+    ///
+    /// let (zero, ten) = (TEC::from_tecu(0.0), TEC::from_tecu(10.0));
+    ///
+    /// let cell0 = MapCell::from_unitary_tec(t0, zero, zero, zero, zero);
+    /// let cell1 = MapCell::from_unitary_tec(t1, ten, ten, ten, ten);
+    ///
+    /// let t = t0 + 15.0 * Unit::Minute;
+    /// let interpolated = cell0.temporally_interpolated(t, &cell1).unwrap();
+    ///
+    /// assert_eq!(interpolated.epoch, t);
+    /// assert_eq!(interpolated.north_east.tec.tecu(), 2.5);
+    ///
+    /// // outside the temporal interval
+    /// assert!(cell0.temporally_interpolated(t1 + 1.0 * Unit::Second, &cell1).is_err());
+    /// ```
+    pub fn temporally_interpolated(&self, epoch: Epoch, rhs: &Self) -> Result<Self, Error> {
+        if !self.spatial_match(rhs) {
+            return Err(Error::SpatialMismatch);
+        }
 
-    // /// Determines the southwestern cell amongst a grouping of 4
-    // pub fn southwesternmost_cell4(cell1: &Self, cell2: &Self, cell3: &Self, cell4: &Self) -> Self {
-    //     let min_x = cell1
-    //         .point
-    //         .x()
-    //         .min(cell2.point.x())
-    //         .min(cell3.point.x())
-    //         .min(cell4.point.x());
-    //     let min_y = cell1
-    //         .point
-    //         .y()
-    //         .min(cell2.point.y())
-    //         .min(cell3.point.y())
-    //         .min(cell4.point.y());
+        let (w0, w1) = self.temporal_weights(epoch, rhs)?;
 
-    //     if cell1.point.x() == min_x && cell1.point.y() == min_y {
-    //         *cell_1
-    //     } else if cell2.point.x() == min_x && cell2.point.y() == min_y {
-    //         *cell_2
-    //     } else if cell3.point.x() == min_x && cell3.point.y() == min_y {
-    //         *cell_3
-    //     } else {
-    //         *cell_4
-    //     }
-    // }
+        let interp = |lhs: &TecPoint, rhs: &TecPoint| {
+            let mut tec = TEC::from_tecu(w0 * lhs.tec.tecu() + w1 * rhs.tec.tecu());
 
-    // /// Interpolate the TEC at 4 points described by provided [Rect]angle, returning a new [MapCell].
-    // /// We use 4 neighboring [MapCell]s to apply the interpolation equation with the highest precision
-    // /// on each corner of the [Rect]angle. This is to be used when the ROI does not align with the grid space.
-    // pub fn interpolate_at_grouping4(
-    //     &self,
-    //     roi: Rect,
-    //     neighbor_1: &Self,
-    //     neighbor_2: &Self,
-    //     neighbor_3: &Self,
-    // ) -> Result<Self, Error> {
-    //     let (
-    //         (roi_ne_lat, roi_ne_long),
-    //         (roi_se_lat, roi_se_long),
-    //         (roi_sw_lat, roi_sw_long),
-    //         (roi_nw_lat, roi_nw_long),
-    //     ) = rectangle_to_cardinals(roi);
+            if let (Some(rms0), Some(rms1)) =
+                (lhs.tec.root_mean_square(), rhs.tec.root_mean_square())
+            {
+                tec.rms = Some(Quantized::auto_scaled(w0 * rms0 + w1 * rms1));
+            }
 
-    //     // determines NE, SE, NW, NE cells conveniently
-    //     // so we tolerate a random order (but they need to be neighboring cells)
-    //     let ne_cell = Self::northeasternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
-    //     let se_cell = Self::southasternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
-    //     let nw_cell = Self::northwesternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
-    //     let ne_cell = Self::northeasternmost_cell4(self, neighbor_1, neighbor_2, neighbor_3);
+            TecPoint {
+                point: lhs.point,
+                tec,
+            }
+        };
 
-    //     // verifies they are all neighboring cells
-    //     if !nw_cell.is_western_neighbor(ne_cell) {
-    //         return Err();
-    //     }
-    //     if !ne_cell.is_northern_neighbor(se_cell) {
-    //         return Err();
-    //     }
-    //     if !se_cell.is_eastern_neighbor(sw_cell) {
-    //         return Err();
-    //     }
-    //     if !nw_cell.is_northern_neighbor(sw_cell) {
-    //         return Err();
-    //     }
-    // }
-
-    // /// Merges two neighboring [MapCell]s forming a new (upscaled) [MapCell].
-    // /// Both cells must be synchronous.
-    // pub fn merge_neighbors(&self, rhs: &Self) -> Result<Self, Error> {
-    //     if !self.temporal_match(rhs) {
-    //         return Err(Error::TemporalMismatch);
-    //     }
-
-    //     // 1: determine the matching corners. The center
-    //     // point of the matching line is to become the new center.
-    //     // 2: form a new cell, of the boundary rect, interpolate
-    //     // both TEC at the new center
-
-    //     if self.is_northern_neighbor(rhs) {
-    //         Ok(Self::default()) // TODO
-    //     } else if self.is_southern_neighbor(rhs) {
-    //         Ok(Self::default()) // TODO
-    //     } else if self.is_western_neighbor(rhs) {
-    //         Ok(Self::default()) // TODO
-    //     } else if self.is_eastern_neighbor(rhs) {
-    //         Ok(Self::default()) // TODO
-    //     } else {
-    //         Err(Error::SpatialMismatch)
-    //     }
-    // }
-
-    // /// Interpolates two [MapCell]s that must describe the same area,
-    // /// but a different point in time.
-    // ///
-    // /// ## Input
-    // /// - epoch: [Epoch] of interpolation, must be temporally in between
-    // /// [Self] and rhs.
-    // pub fn temporally_interpolated(&self, epoch: Epoch, rhs: &Self) -> Result<Self, Error> {
-    //     if !self.spatial_match(rhs) {
-    //         return Err(Error::SpatialMismatch);
-    //     }
-
-    //     let (min_t, max_t) =
-    //     (
-    //         std::cmp::min(self.epoch, rhs.epoch),
-    //         std::cmp::max(self.epoch, rhs.epoch),
-    //     );
-
-    //     if epoch < min_t && epoch > max_t {
-    //         return Err(Error::InvalidTemporalPoint);
-    //     }
-
-    //     let (num_1, num_2, dt) = if self.epoch > rhs.epoch {
-    //         (
-    //             (self.epoch - epoch).to_seconds(),
-    //             (epoch - rhs.epoch).to_seconds(),
-    //             (self.epoch - rhs.epoch).to_seconds(),
-    //         )
-    //     } else {
-    //         (
-    //             (rhs.epoch - epoch).to_seconds(),
-    //             (epoch - self.epoch).to_seconds(),
-    //             (rhs.epoch - self.epoch).to_seconds(),
-    //         )
-    //     };
-
-    //     let (ne_1, ne_2) = if self.epoch > rhs.epoch {
-    //        (self.north_east.tec.tecu(), rhs.north_east.tec.tecu())
-    //     } else {
-    //        (rhs.north_east.tec.tecu(), self.north_east.tec.tecu())
-    //     };
-    //
-    //     let (nw_1, nw_2) = if self.epoch > rhs.epoch {
-    //        (self.north_west.tec.tecu(), rhs.north_west.tec.tecu())
-    //     } else {
-    //        (rhs.north_west.tec.tecu(), self.north_west.tec.tecu())
-    //     };
-
-    //     let (se_1, se_2) = if self.epoch > rhs.epoch {
-    //        (self.south_east.tec.tecu(), rhs.south_east.tec.tecu())
-    //     } else {
-    //        (rhs.south_east.tec.tecu(), self.south_east.tec.tecu())
-    //     };
-    //
-    //     let (sw_1, sw_2) = if self.epoch > rhs.epoch {
-    //        (self.south_west.tec.tecu(), rhs.south_west.tec.tecu())
-    //     } else {
-    //        (rhs.south_west.tec.tecu(), self.south_west.tec.tecu())
-    //     };
-
-    //     Ok(Self {
-    //         epoch,
-    //         north_east: TecPoint {
-    //             point: self.north_east.point,
-    //             tec: TEC::from_tecu(
-    //                 num_1 * ne_1 /dt + num_2 * ne_2 /dt
-    //             ),
-    //         },
-    //         north_west: TecPoint {
-    //             point: self.north_west.point,
-    //             tec: TEC::from_tecu(
-    //                 num_1 * nw_1 /dt + num_2 * nw_2 /dt
-    //             ),
-    //         },
-    //         south_east: TecPoint {
-    //             point: self.south_east.point,
-    //             tec: TEC::from_tecu(
-    //                 num_1 * se_1 /dt + num_2 * se_2 /dt
-    //             ),
-    //         },
-    //         south_west: TecPoint {
-    //             point: self.south_west.point,
-    //             tec: TEC::from_tecu(
-    //                 num_1 * sw_1 /dt + num_2 * sw_2 /dt
-    //             ),
-    //         },
-    //     })
-    // }
+        Ok(Self {
+            epoch,
+            north_east: interp(&self.north_east, &rhs.north_east),
+            north_west: interp(&self.north_west, &rhs.north_west),
+            south_east: interp(&self.south_east, &rhs.south_east),
+            south_west: interp(&self.south_west, &rhs.south_west),
+        })
+    }
 
     /// Spatial + Temporal Interpolation of [TEC] value using planery equation
     /// and rhs [MapCell], which should be closely sampled in time.
@@ -811,31 +711,15 @@ impl MapCell {
         coordinates: Point<f64>,
         rhs: &Self,
     ) -> Result<TEC, Error> {
+        let (w0, w1) = self.temporal_weights(epoch, rhs)?;
+
         // interpolate at exact coordinates
         let (tecu_0, tecu_1) = (
             self.spatial_tec_interp(coordinates)?.tecu(),
             rhs.spatial_tec_interp(coordinates)?.tecu(),
         );
 
-        if epoch >= self.epoch && epoch < rhs.epoch {
-            // forward
-            let dt = (rhs.epoch - self.epoch).to_seconds();
-
-            let tecu = (rhs.epoch - epoch).to_seconds() / dt * tecu_0
-                + (epoch - self.epoch).to_seconds() / dt * tecu_1;
-
-            Ok(TEC::from_tecu(tecu))
-        } else if epoch >= rhs.epoch && epoch < self.epoch {
-            // backwards
-            let dt = (self.epoch - rhs.epoch).to_seconds();
-
-            let tecu = (self.epoch - epoch).to_seconds() / dt * tecu_1
-                + (epoch - rhs.epoch).to_seconds() / dt * tecu_0;
-
-            Ok(TEC::from_tecu(tecu))
-        } else {
-            Err(Error::TemporalMismatch)
-        }
+        Ok(TEC::from_tecu(w0 * tecu_0 + w1 * tecu_1))
     }
 }
 
@@ -915,6 +799,160 @@ mod test {
 
             assert_eq!(interpolated, tecu, "failed at (x={}, y={})", x_deg, y_deg);
         }
+    }
+
+    #[test]
+    fn spatial_asymmetric_interpolation() {
+        let epoch = Epoch::default();
+        let (zero, one) = (TEC::from_tecu(0.0), TEC::from_tecu(1.0));
+
+        // only SE corner is non null
+        let cell = MapCell::from_unitary_tec(epoch, zero, zero, one, zero);
+
+        // x=longitude, y=latitude
+        for (x, y, expected) in [
+            (1.0, 0.0, 1.0),      // SE corner
+            (0.0, 1.0, 0.0),      // NW corner
+            (0.75, 0.25, 0.5625), // close to SE
+            (0.25, 0.75, 0.0625), // close to NW
+            (1.0, 0.5, 0.5),      // eastern edge
+            (0.5, 0.0, 0.5),      // southern edge
+        ] {
+            let tecu = cell.spatial_tec_interp(Point::new(x, y)).unwrap().tecu();
+            assert!(
+                (tecu - expected).abs() < 1E-9,
+                "failed at (x={}, y={}): {} instead of {}",
+                x,
+                y,
+                tecu,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn spatial_offset_cell_interpolation() {
+        let epoch = Epoch::default();
+
+        // a cell like found in IONEX maps, far from origin
+        let cell = MapCell::from_lat_long_degrees(
+            epoch,
+            (-40.0, -60.0),
+            TEC::from_tecu(4.0).with_rms(0.4),
+            (-40.0, -65.0),
+            TEC::from_tecu(3.0).with_rms(0.3),
+            (-42.5, -60.0),
+            TEC::from_tecu(2.0).with_rms(0.2),
+            (-42.5, -65.0),
+            TEC::from_tecu(1.0).with_rms(0.1),
+        );
+
+        assert_eq!(cell.latitude_longitude_span_degrees(), (2.5, 5.0));
+        assert_eq!(cell.center(), Point::new(-62.5, -41.25));
+
+        // corners are preserved
+        for (corner, expected) in [
+            (cell.north_east, 4.0),
+            (cell.north_west, 3.0),
+            (cell.south_east, 2.0),
+            (cell.south_west, 1.0),
+        ] {
+            let tec = cell.spatial_tec_interp(corner.point).unwrap();
+            assert!((tec.tecu() - expected).abs() < 1E-9);
+            assert!((tec.root_mean_square().unwrap() - expected / 10.0).abs() < 1E-9);
+        }
+
+        // center
+        let tec = cell.spatial_tec_interp(cell.center()).unwrap();
+        assert!((tec.tecu() - 2.5).abs() < 1E-9);
+        assert!((tec.root_mean_square().unwrap() - 0.25).abs() < 1E-9);
+
+        // linear along an edge
+        let tec = cell.spatial_tec_interp(Point::new(-61.25, -40.0)).unwrap();
+        assert!((tec.tecu() - 3.75).abs() < 1E-9);
+
+        assert!(cell.spatial_tec_interp(Point::new(-59.0, -41.0)).is_err());
+    }
+
+    #[test]
+    fn neighbors() {
+        let t = Epoch::default();
+        let tec = TEC::from_tecu(1.0);
+
+        // build a 3x3 grouping with unitary cells: (lat, long) of the SW corner
+        let cell = |lat: f64, long: f64| {
+            MapCell::from_lat_long_degrees(
+                t,
+                (lat + 1.0, long + 1.0),
+                tec,
+                (lat + 1.0, long),
+                tec,
+                (lat, long + 1.0),
+                tec,
+                (lat, long),
+                tec,
+            )
+        };
+
+        let center = cell(0.0, 0.0);
+
+        assert!(cell(1.0, 0.0).is_northern_neighbor(&center));
+        assert!(cell(-1.0, 0.0).is_southern_neighbor(&center));
+        assert!(cell(0.0, 1.0).is_eastern_neighbor(&center));
+        assert!(cell(0.0, -1.0).is_western_neighbor(&center));
+        assert!(cell(1.0, 1.0).is_northeastern_neighbor(&center));
+        assert!(cell(1.0, -1.0).is_northwestern_neighbor(&center));
+        assert!(cell(-1.0, 1.0).is_southeastern_neighbor(&center));
+        assert!(cell(-1.0, -1.0).is_southwestern_neighbor(&center));
+
+        assert!(!cell(0.0, 1.0).is_western_neighbor(&center));
+        assert!(!cell(0.0, -1.0).is_eastern_neighbor(&center));
+        assert!(!cell(2.0, 0.0).is_neighbor(&center));
+
+        // 3x3 grouping, in random order
+        let cells = [
+            cell(1.0, -1.0),
+            cell(-1.0, 1.0),
+            cell(0.0, 1.0),
+            cell(0.0, 0.0),
+            cell(1.0, 1.0),
+            cell(-1.0, 0.0),
+            cell(0.0, -1.0),
+            cell(-1.0, -1.0),
+            cell(1.0, 0.0),
+        ];
+
+        let grouping = Cell3x3::from_slice(cells).expect("valid 3x3 grouping");
+        assert_eq!(grouping.center, center);
+        assert_eq!(grouping.north, cell(1.0, 0.0));
+        assert_eq!(grouping.northeast, cell(1.0, 1.0));
+        assert_eq!(grouping.east, cell(0.0, 1.0));
+        assert_eq!(grouping.southeast, cell(-1.0, 1.0));
+        assert_eq!(grouping.south, cell(-1.0, 0.0));
+        assert_eq!(grouping.southwest, cell(-1.0, -1.0));
+        assert_eq!(grouping.west, cell(0.0, -1.0));
+        assert_eq!(grouping.northwest, cell(1.0, -1.0));
+    }
+
+    #[test]
+    fn stretching() {
+        let t = Epoch::default();
+        let (zero, one) = (TEC::from_tecu(0.0), TEC::from_tecu(1.0));
+
+        // eastward gradient
+        let cell = MapCell::from_unitary_tec(t, one, zero, one, zero);
+
+        // identity
+        assert_eq!(cell.stretched(1.0).unwrap(), cell);
+
+        let reduced = cell.stretched(0.5).unwrap();
+        assert_eq!(reduced.center(), cell.center());
+        assert_eq!(reduced.latitude_longitude_span_degrees(), (0.5, 0.5));
+        assert!((reduced.north_east.tec.tecu() - 0.75).abs() < 1E-9);
+        assert!((reduced.south_west.tec.tecu() - 0.25).abs() < 1E-9);
+
+        assert!(cell.stretched(0.0).is_err());
+        assert!(cell.stretched(-1.0).is_err());
     }
 
     #[test]

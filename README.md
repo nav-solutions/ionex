@@ -25,14 +25,18 @@ quantization spec that is constant over entire fileset and is described in the h
 - Fast and powerful parser
 - Open sources: read and access all the code
 - Seamless Gzip decompression (on `flate2` feature)
-- Full 2D support
+- 2D and 3D maps support
 - TEC Root Mean Square is supported
-- File formatting is now supported for 2D IONEX, including RMS maps.
-- Spatial and Temporal interpolation now supported
+- File formatting is supported, including RMS maps
+- TEC interpolation anywhere in space and time, following the IONEX specifications:
+  - spatial: 4 point (bilinear) interpolation, trilinear for 3D maps
+  - temporal: nearest map, linear, or rotated maps (recommended by the specifications)
+- Slant TEC and ionospheric delay along any line of sight (single layer model)
+- Temporal and spatial resampling, reduction to a regional ROI
 
 ## Limitations
 
-- Height map not supported yet
+- Height maps are not supported yet
 
 ## Citation and referencing
 
@@ -74,6 +78,7 @@ Join us on [Discord](https://discord.gg/EqhEBXBmJh) to discuss ongoing and futur
 ```rust
 use std::fs::File;
 use std::io::BufWriter;
+use std::str::FromStr;
 
 use ionex::prelude::*;
 
@@ -101,9 +106,30 @@ assert!(ionex.is_2d());
 // this file is named according to IGS standards
 let descriptor = ionex.attributes.clone().unwrap();
 
-// to obtain TEC values at any coordinates, you
-// should use the [MapCell] local region (rectangle quanta)
-// that offers many functions based off the Geo crate.
+// TEC values at any coordinates and any point in time.
+// Coordinates follow the geo crate convention:
+// x = longitude, y = latitude, in decimal degrees.
+let t = Epoch::from_str("2022-01-02T12:34:56 UTC").unwrap();
+let toulouse = Point::new(1.44, 43.6);
+
+let tec = ionex.tec_at(t, toulouse).unwrap();
+assert!(tec.tecu() > 0.0);
+
+// choose another temporal interpolation strategy
+let tec = ionex.tec_at_with(t, toulouse, TemporalInterpolation::Linear)
+    .unwrap();
+
+// Slant TEC along a line of sight (elevation=30°, azimuth=135°)
+let stec = ionex.slant_tec_at(t, toulouse, 30.0, 135.0)
+    .unwrap();
+
+// and the related ionospheric delay on GPS L1, in meters
+let delay_m = stec.ionospheric_delay_m(1575.42E6);
+
+// the [MapCell] local region (rectangle quanta)
+// offers many functions based off the Geo crate.
+let cell = ionex.unitary_roi_at(t, toulouse).unwrap();
+assert!(cell.contains(&Geometry::Point(toulouse)));
 
 // Convenient helper to follow standard conventions
 let filename = ionex.generate_standardized_filename();
