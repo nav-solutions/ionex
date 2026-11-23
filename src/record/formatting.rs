@@ -3,36 +3,95 @@ use crate::{
     epoch::format_body as format_epoch,
     error::FormattingError,
     fmt_ionex,
-    prelude::{Header, Key, Record},
+    prelude::{Epoch, Header, Key, Record, TEC},
 };
 
 use std::io::{BufWriter, Write};
 
+/// Number of values per line
+const VALUES_PER_LINE: usize = 16;
+
+/// Omitted value
+const OMITTED: &str = " 9999";
+
 impl Record {
+    /// Formats one map (TEC or RMS) at this [Epoch], for all altitude layers.
+    fn format_map<W: Write, F: Fn(&TEC) -> Option<f64>>(
+        &self,
+        header: &Header,
+        epoch: Epoch,
+        value: F,
+        w: &mut BufWriter<W>,
+    ) -> Result<(), FormattingError> {
+        // IONEX stores quantized values as v = 10^-k (with k the exponent)
+        let scaling = 10.0_f64.powi(-header.exponent as i32);
+
+        for altitude in header.grid.altitude.quantize() {
+            for latitude in header.grid.latitude.quantize() {
+                // grid specs
+                writeln!(
+                    w,
+                    "{}",
+                    fmt_ionex(
+                        &format!(
+                            "  {:6.1}{:6.1}{:6.1}{:6.1}{:6.1}",
+                            latitude.real_value(),
+                            header.grid.longitude.start,
+                            header.grid.longitude.end,
+                            header.grid.longitude.spacing,
+                            altitude.real_value(),
+                        ),
+                        "LAT/LON1/LON2/DLON/H"
+                    )
+                )?;
+
+                let mut nth = 0;
+
+                for longitude in header.grid.longitude.quantize() {
+                    let key = Key {
+                        epoch,
+                        coordinates: QuantizedCoordinates::from_quantized(
+                            latitude, longitude, altitude,
+                        ),
+                    };
+
+                    match self.get(&key).and_then(&value) {
+                        Some(value) => {
+                            let quantized = (value * scaling).round() as i64;
+                            write!(w, "{:5}", quantized)?;
+                        },
+                        None => {
+                            write!(w, "{}", OMITTED)?;
+                        },
+                    }
+
+                    nth += 1;
+
+                    if nth % VALUES_PER_LINE == 0 {
+                        writeln!(w)?;
+                    }
+                }
+
+                if nth % VALUES_PER_LINE != 0 {
+                    writeln!(w)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Format IONEX [Record] into [Write]able interface, using efficient buffering.
-    /// This requires reference to attached [Header] section.
+    /// This requires reference to attached [Header] section, which describes the grid
+    /// (2D or 3D) and the scaling exponent of the TEC and RMS values.
     pub fn format<W: Write>(
         &self,
         header: &Header,
         w: &mut BufWriter<W>,
     ) -> Result<(), FormattingError> {
-        const FORMATTED_OFFSET: usize = 5;
+        let has_rms = self.map.values().any(|tec| tec.rms.is_some());
 
-        // NB: this will not work if
-        // - grid accuracy changes between regions or epochs
-        // - map is not 2D
-        // - does not support scaling update very smoothly
-
-        let (latitude_min, latitude_max) = header.grid.latitude.minmax();
-        let (longitude_min, longitude_max) = header.grid.longitude.minmax();
-
-        let mut line_offset;
-        let mut longitude_ptr_ddeg;
-        let mut has_rms = false;
-
-        // TEC MAPs. Grid browsing:
-        // - browse latitude (from southernmost to northernmost)
-        // - browse longitude (from westernmost to easternmost)
+        // TEC maps
         for (nth_map, epoch) in self.epochs_iter().enumerate() {
             writeln!(
                 w,
@@ -46,65 +105,7 @@ impl Record {
                 fmt_ionex(&format_epoch(epoch), "EPOCH OF CURRENT MAP")
             )?;
 
-            let mut latitude_ptr_ddeg = latitude_max;
-
-            while latitude_ptr_ddeg >= latitude_min {
-                line_offset = 0;
-                longitude_ptr_ddeg = longitude_min;
-
-                // grid specs
-                writeln!(
-                    w,
-                    "{}",
-                    fmt_ionex(
-                        &format!(
-                            "  {:6.1}{:6.1}{:6.1}{:6.1}{:6.1}",
-                            latitude_ptr_ddeg,
-                            header.grid.longitude.start,
-                            header.grid.longitude.end,
-                            header.grid.longitude.spacing,
-                            header.grid.altitude.start,
-                        ),
-                        "LAT/LON1/LON2/DLON/H"
-                    )
-                )?;
-
-                while longitude_ptr_ddeg <= longitude_max {
-                    // obtain coordinates
-                    let coordinates = QuantizedCoordinates::from_decimal_degrees(
-                        latitude_ptr_ddeg,
-                        longitude_ptr_ddeg,
-                        header.grid.altitude.start,
-                    );
-
-                    let key = Key { epoch, coordinates };
-
-                    // format map
-                    if let Some(tec) = self.get(&key) {
-                        has_rms |= tec.rms.is_some();
-
-                        write!(w, "{:5}", tec.tecu.value)?;
-                    } else {
-                        write!(w, " 9999")?; // standardized
-                    }
-
-                    line_offset += FORMATTED_OFFSET;
-
-                    if line_offset >= 80 {
-                        write!(w, "{}", '\n')?;
-                        line_offset = 0;
-                    }
-
-                    longitude_ptr_ddeg += header.grid.longitude.spacing;
-                }
-
-                if line_offset != 80 {
-                    // needs termination
-                    write!(w, "{}", '\n')?;
-                }
-
-                latitude_ptr_ddeg += header.grid.latitude.spacing;
-            }
+            self.format_map(header, epoch, |tec| Some(tec.tecu()), w)?;
 
             writeln!(
                 w,
@@ -113,9 +114,7 @@ impl Record {
             )?;
         }
 
-        // RMS MAP (if any) Grid browsing:
-        // - browse latitude (from southernmost to northernmost)
-        // - browse longitude (from westernmost to easternmost)
+        // RMS maps (if any)
         if has_rms {
             for (nth_map, epoch) in self.epochs_iter().enumerate() {
                 writeln!(
@@ -130,67 +129,7 @@ impl Record {
                     fmt_ionex(&format_epoch(epoch), "EPOCH OF CURRENT MAP")
                 )?;
 
-                let mut latitude_ptr_ddeg = latitude_max;
-
-                while latitude_ptr_ddeg >= latitude_min {
-                    line_offset = 0;
-                    longitude_ptr_ddeg = longitude_min;
-
-                    // grid specs
-                    writeln!(
-                        w,
-                        "{}",
-                        fmt_ionex(
-                            &format!(
-                                "  {:6.1}{:6.1}{:6.1}{:6.1}{:6.1}",
-                                latitude_ptr_ddeg,
-                                header.grid.longitude.start,
-                                header.grid.longitude.end,
-                                header.grid.longitude.spacing,
-                                header.grid.altitude.start,
-                            ),
-                            "LAT/LON1/LON2/DLON/H"
-                        )
-                    )?;
-
-                    while longitude_ptr_ddeg <= longitude_max {
-                        // obtain coordinates
-                        let coordinates = QuantizedCoordinates::from_decimal_degrees(
-                            latitude_ptr_ddeg,
-                            longitude_ptr_ddeg,
-                            header.grid.altitude.start,
-                        );
-
-                        let key = Key { epoch, coordinates };
-
-                        // format map
-                        if let Some(tec) = self.get(&key) {
-                            if let Some(rms) = tec.rms {
-                                write!(w, "{:5}", rms.value)?;
-                            } else {
-                                write!(w, " 9999")?; // standardized
-                            }
-                        } else {
-                            write!(w, " 9999")?; // standardized
-                        }
-
-                        line_offset += FORMATTED_OFFSET;
-
-                        if line_offset >= 80 {
-                            write!(w, "{}", '\n')?;
-                            line_offset = 0;
-                        }
-
-                        longitude_ptr_ddeg += header.grid.longitude.spacing;
-                    }
-
-                    if line_offset != 80 {
-                        // needs termination
-                        write!(w, "{}", '\n')?;
-                    }
-
-                    latitude_ptr_ddeg += header.grid.latitude.spacing;
-                }
+                self.format_map(header, epoch, |tec| tec.root_mean_square(), w)?;
 
                 writeln!(
                     w,

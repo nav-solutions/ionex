@@ -1,9 +1,12 @@
 pub mod toolkit;
 // pub mod formatting;
 
+mod cells;
 mod filename;
+mod interpolation;
 mod parsing;
 mod qc;
+mod resampling;
 mod roi;
 // mod stretching;
 

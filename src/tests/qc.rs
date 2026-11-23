@@ -77,7 +77,7 @@ fn v1_files_merge() {
     assert!(merged.is_worldwide_map());
 
     // Dump to file
-    let fd = File::create("merged.txt").unwrap();
+    let fd = File::create("merged-files.txt").unwrap();
     let mut writer = BufWriter::new(fd);
 
     merged.format(&mut writer).unwrap_or_else(|e| {
@@ -85,7 +85,7 @@ fn v1_files_merge() {
     });
 
     // parse back
-    let parsed = IONEX::from_file("merged.txt").unwrap_or_else(|e| {
+    let parsed = IONEX::from_file("merged-files.txt").unwrap_or_else(|e| {
         panic!("failed to parse back CKMG V1: {}", e);
     });
 

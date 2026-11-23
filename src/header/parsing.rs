@@ -109,6 +109,17 @@ impl Header {
                     .map_err(|_| ParsingError::SamplingPeriod)?;
 
                 header.sampling_period = Duration::from_seconds(interval);
+            } else if marker.contains("MAP DIMENSION") {
+                let dimension = content
+                    .trim()
+                    .parse::<u8>()
+                    .map_err(|_| ParsingError::MapDimension)?;
+
+                if dimension != 2 && dimension != 3 {
+                    return Err(ParsingError::MapDimension);
+                }
+
+                header.map_dimension = dimension;
             } else if marker.contains("LAT1 / LAT2 / DLAT") {
                 // latitude grid specs
                 let (start_str, rem) = content.split_at(8);

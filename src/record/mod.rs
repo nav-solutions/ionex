@@ -8,7 +8,11 @@ use std::collections::{BTreeMap, btree_map::Iter};
 
 use itertools::Itertools;
 
-use crate::prelude::{Epoch, Key, MapCell, TEC};
+use crate::{
+    coordinates::QuantizedCoordinates,
+    prelude::{Epoch, Key, MapCell, TEC},
+    quantized::Quantized,
+};
 
 /// IONEX [Record] contains [MapCell]s in chronological order.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -87,8 +91,6 @@ impl Record {
         for cell in slice.iter() {
             // for each cell, we can produce 4 points
             // we take advantage of the map to avoid replicated points
-            let epoch = cell.epoch;
-
             let (ne_point, nw_point, sw_point, se_point) = (
                 cell.north_east.point,
                 cell.north_west.point,
@@ -146,16 +148,90 @@ impl Record {
 
     /// Returns first [Epoch] in chronological order
     pub fn first_epoch(&self) -> Option<Epoch> {
-        self.epochs_iter().nth(0)
+        self.map.keys().next().map(|k| k.epoch)
+    }
+
+    /// Returns last [Epoch] in chronological order
+    pub fn last_epoch(&self) -> Option<Epoch> {
+        self.map.keys().next_back().map(|k| k.epoch)
+    }
+
+    /// Smallest (resp. largest) possible [Key] at this [Epoch]
+    fn epoch_bound(epoch: Epoch, lower: bool) -> Key {
+        let value = if lower { i64::MIN } else { i64::MAX };
+        let q = Quantized { value, exponent: 0 };
+
+        Key {
+            epoch,
+            coordinates: QuantizedCoordinates::from_quantized(q, q, q),
+        }
+    }
+
+    /// Returns true if this [Record] contains a map at this [Epoch]
+    pub fn has_epoch(&self, epoch: Epoch) -> bool {
+        self.map
+            .range(Self::epoch_bound(epoch, true)..=Self::epoch_bound(epoch, false))
+            .next()
+            .is_some()
+    }
+
+    /// Returns the latest [Epoch] that is prior or equal to this [Epoch]
+    pub fn epoch_before(&self, epoch: Epoch) -> Option<Epoch> {
+        self.map
+            .range(..=Self::epoch_bound(epoch, false))
+            .next_back()
+            .map(|(k, _)| k.epoch)
+    }
+
+    /// Returns the earliest [Epoch] that is posterior or equal to this [Epoch]
+    pub fn epoch_after(&self, epoch: Epoch) -> Option<Epoch> {
+        self.map
+            .range(Self::epoch_bound(epoch, true)..)
+            .next()
+            .map(|(k, _)| k.epoch)
+    }
+
+    /// Returns the (t0, t1) pair of map [Epoch]s that surround this [Epoch],
+    /// with t0 <= epoch <= t1. Both are equal when a map exists at this very [Epoch].
+    /// Returns None when this [Epoch] is outside of the temporal axis.
+    pub fn epoch_bracket(&self, epoch: Epoch) -> Option<(Epoch, Epoch)> {
+        let (t0, t1) = (self.epoch_before(epoch)?, self.epoch_after(epoch)?);
+        Some((t0, t1))
     }
 }
 
 #[cfg(test)]
 mod test {
     use crate::prelude::*;
+    use std::str::FromStr;
 
     #[test]
-    #[ignore]
+    fn epoch_bracketing() {
+        let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz").unwrap();
+
+        let t0 = Epoch::from_str("2022-01-02T00:00:00 UTC").unwrap();
+        let t_end = Epoch::from_str("2022-01-03T00:00:00 UTC").unwrap();
+
+        assert_eq!(ionex.record.first_epoch(), Some(t0));
+        assert_eq!(ionex.record.last_epoch(), Some(t_end));
+
+        let noon = Epoch::from_str("2022-01-02T12:00:00 UTC").unwrap();
+        assert!(ionex.record.has_epoch(noon));
+        assert_eq!(ionex.record.epoch_bracket(noon), Some((noon, noon)));
+
+        let t = Epoch::from_str("2022-01-02T12:20:00 UTC").unwrap();
+        assert!(!ionex.record.has_epoch(t));
+
+        let one_pm = Epoch::from_str("2022-01-02T13:00:00 UTC").unwrap();
+        assert_eq!(ionex.record.epoch_bracket(t), Some((noon, one_pm)));
+
+        let before = t0 - Duration::from_seconds(1.0);
+        let after = t_end + Duration::from_seconds(1.0);
+        assert_eq!(ionex.record.epoch_bracket(before), None);
+        assert_eq!(ionex.record.epoch_bracket(after), None);
+    }
+
+    #[test]
     fn ckmg_maps_cells_repiprocal() {
         let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz").unwrap_or_else(|e| {
             panic!("Failed to parse CKMG0020: {}", e);
@@ -172,7 +248,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn jplg_maps_cells_repiprocal() {
         let ionex = IONEX::from_gzip_file("data/IONEX/V1/jplg0010.17i.gz").unwrap_or_else(|e| {
             panic!("Failed to parse CKMG0020: {}", e);

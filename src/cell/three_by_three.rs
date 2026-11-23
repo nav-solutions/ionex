@@ -1,8 +1,4 @@
-use std::collections::HashMap;
-
-use geo::{Contains, GeodesicArea, Geometry, Point, Rect};
-
-use crate::prelude::{Epoch, Error, MapCell, TEC};
+use crate::prelude::{Epoch, Error, MapCell};
 
 // #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd)]
 // #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -278,7 +274,7 @@ impl Cell3x3 {
     /// Returns a stretched (spatially upscaled or downscaled) [MapCell] by
     /// stretching the central element and taking the relative neighboring values into
     /// account.
-    pub fn stretched(&self, factor: f64) -> Result<MapCell, Error> {
+    pub fn stretched(&self, _factor: f64) -> Result<MapCell, Error> {
         Err(Error::OutsideSpatialBoundaries) // TODO
     }
 }

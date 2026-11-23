@@ -25,6 +25,8 @@ pub mod error;
 pub mod file_attributes;
 pub mod grid;
 pub mod header;
+pub mod interpolation;
+pub mod ipp;
 pub mod key;
 pub mod linspace;
 pub mod mapf;
@@ -43,7 +45,6 @@ mod record;
 mod tests;
 
 use std::{
-    collections::BTreeMap,
     fs::File,
     io::{BufReader, BufWriter, Read, Write},
     path::Path,
@@ -52,21 +53,24 @@ use std::{
 
 use itertools::Itertools;
 
-use geo::{BoundingRect, Contains, Geometry, LineString, Point, Polygon, Rect, coord};
+use geo::{BoundingRect, Geometry, Point, Polygon, Rect, coord};
 
 #[cfg(feature = "flate2")]
 use flate2::{Compression as GzCompression, read::GzDecoder, write::GzEncoder};
 
-use hifitime::prelude::{Epoch, TimeSeries};
+use hifitime::prelude::{Duration, Epoch, TimeSeries};
 
 use crate::{
-    cell::{Cell3x3, MapCell, TecPoint},
+    cell::{MapCell, TecPoint},
     coordinates::QuantizedCoordinates,
     error::{Error, FormattingError, ParsingError},
     file_attributes::{FileAttributes, Region},
-    grid::{Axis, Grid},
+    grid::Grid,
     header::Header,
+    interpolation::TemporalInterpolation,
+    ipp::IPP,
     key::Key,
+    linspace::Linspace,
     quantized::Quantized,
     record::Record,
     tec::TEC,
@@ -77,12 +81,14 @@ pub mod prelude {
     pub use crate::{
         Comments, IONEX,
         bias::BiasSource,
-        cell::{Cell3x3, MapCell},
+        cell::{Cell3x3, MapCell, TecPoint},
         error::{Error, FormattingError, ParsingError},
         file_attributes::*,
         grid::{Axis, Grid},
         header::Header,
+        interpolation::TemporalInterpolation,
         ionosphere::IonosphereParameters,
+        ipp::IPP,
         key::Key,
         linspace::Linspace,
         mapf::MappingFunction,
@@ -127,6 +133,7 @@ pub(crate) fn rectangle_quadrant_decomposition(
 
 /// Converts the NE, SE, SW, NW corners, as (latitude, longitude) pairs in degrees,
 /// to a [Rect]angle (x: longitude, y: latitude)
+#[allow(dead_code)]
 pub(crate) fn quadrant_to_rectangle(
     quadrant: ((f64, f64), (f64, f64), (f64, f64), (f64, f64)),
 ) -> Rect {
@@ -196,9 +203,10 @@ pub(crate) fn fmt_comment(content: &str) -> String {
 /// // this file is named according to IGS standards
 /// let descriptor = ionex.attributes.clone().unwrap();
 ///
-/// // to obtain TEC values at any coordinates, you
-/// // should use the [MapCell] local region (rectangle quanta)
-/// // that offers many functions based off the Geo crate.
+/// // to obtain TEC values at any coordinates and any point in time,
+/// // use [IONEX::tec_at] (2D maps) or [IONEX::volumetric_tec_at] (3D maps).
+/// // The [MapCell] local region (rectangle quanta)
+/// // offers many functions based off the Geo crate.
 ///
 /// // Convenient helper to follow standard conventions
 /// let filename = ionex.generate_standardized_filename();
@@ -303,15 +311,10 @@ impl IONEX {
             ("XXX".to_string(), Region::default(), 0, 0)
         };
 
-        let extension = if let Some(attributes) = &self.attributes {
+        let extension = match &self.attributes {
             #[cfg(feature = "flate2")]
-            if attributes.gzip_compressed {
-                ".gz"
-            } else {
-                ""
-            }
-        } else {
-            ""
+            Some(attributes) if attributes.gzip_compressed => ".gz",
+            _ => "",
         };
 
         format!("{}{}{:03}0.{:02}I{}", agency, region, doy, year, extension)
@@ -606,8 +609,9 @@ impl IONEX {
     /// [Polygon::bounding_rect] must be defined for this operation to work correctly.
     ///
     /// Assuming the original map and '*' marking the complex ROI you want to draw,
-    /// the resuling IONEX is the smallest rectangle the ROI fits in, because this library
-    /// (and correct/valid IONEX) is limited to rectangles.
+    /// the resuling IONEX is the smallest rectangle of grid nodes the ROI fits in, because this library
+    /// (and correct/valid IONEX) is limited to rectangles. The ROI is saturated to the map
+    /// boundaries, and returns [Error::OutsideSpatialBoundaries] if it does not intersect this map.
     ///
     /// origin
     /// ----------------------------------
@@ -620,38 +624,72 @@ impl IONEX {
     /// |       ______________|           |
     /// |---------------------------------|
     pub fn to_regional_ionex(&self, roi: Polygon) -> Result<IONEX, Error> {
-        let mut ionex = IONEX::default().with_header(self.header.clone());
-
         let boundaries = roi.bounding_rect().ok_or(Error::UndefinedBoundaries)?;
 
-        // simply restrict to wrapping area
-        let roi = Geometry::Rect(boundaries);
+        /// Snaps value to the closest grid node, below (or above) this value,
+        /// saturated to the axis boundaries.
+        fn snap(linspace: &Linspace, value: f64, below: bool) -> f64 {
+            let (min, max) = linspace.minmax();
+            let value = value.clamp(min, max);
+            let nodes = linspace.quantize().map(|q| q.real_value());
 
-        let cells = self
-            .map_cell_iter()
-            .filter(|cell| cell.contains(&roi))
-            .collect::<Vec<_>>();
-
-        ionex.record = Record::from_map_cells(&cells, self.header.grid.altitude.start);
-
-        // update attributes
-        match &self.attributes {
-            Some(attributes) => {
-                ionex.attributes = Some(attributes.clone().regionalized());
-            },
-            None => {
-                let mut attributes = FileAttributes::default().regionalized();
-                ionex.attributes = Some(attributes);
-            },
+            if below {
+                nodes
+                    .filter(|node| *node <= value + 1.0E-9)
+                    .fold(min, f64::max)
+            } else {
+                nodes
+                    .filter(|node| *node >= value - 1.0E-9)
+                    .fold(max, f64::min)
+            }
         }
 
-        // update header
-        ionex.header.grid.latitude.start = self.header.grid.latitude.start.min(boundaries.max().y);
-        ionex.header.grid.longitude.start =
-            self.header.grid.longitude.start.max(boundaries.min().x);
+        let grid = &self.header.grid;
 
-        ionex.header.grid.latitude.end = self.header.grid.latitude.end.max(boundaries.min().y);
-        ionex.header.grid.longitude.end = self.header.grid.longitude.end.min(boundaries.max().x);
+        let (min_lat, max_lat) = (
+            snap(&grid.latitude, boundaries.min().y, true),
+            snap(&grid.latitude, boundaries.max().y, false),
+        );
+
+        let (min_long, max_long) = (
+            snap(&grid.longitude, boundaries.min().x, true),
+            snap(&grid.longitude, boundaries.max().x, false),
+        );
+
+        if min_lat >= max_lat || min_long >= max_long {
+            return Err(Error::OutsideSpatialBoundaries);
+        }
+
+        let mut ionex = self.clone();
+
+        ionex.record.map.retain(|k, _| {
+            let (lat, long) = (k.latitude_ddeg(), k.longitude_ddeg());
+            lat >= min_lat - 1.0E-9
+                && lat <= max_lat + 1.0E-9
+                && long >= min_long - 1.0E-9
+                && long <= max_long + 1.0E-9
+        });
+
+        // update attributes
+        ionex.attributes = Some(match &self.attributes {
+            Some(attributes) => attributes.clone().regionalized(),
+            None => FileAttributes::default().regionalized(),
+        });
+
+        // update header, preserving the axes orientation
+        let latitude = &mut ionex.header.grid.latitude;
+        (latitude.start, latitude.end) = if latitude.spacing < 0.0 {
+            (max_lat, min_lat)
+        } else {
+            (min_lat, max_lat)
+        };
+
+        let longitude = &mut ionex.header.grid.longitude;
+        (longitude.start, longitude.end) = if longitude.spacing < 0.0 {
+            (max_long, min_long)
+        } else {
+            (min_long, max_long)
+        };
 
         Ok(ionex)
     }
@@ -690,25 +728,6 @@ impl IONEX {
     // pub fn spatially_stretched(&self, axis: Axis, factor: f64) -> Result<IONEX, Error> {
     //     let mut s = self.clone();
     //     s.spatial_stretching_mut(axis, factor)?;
-    //     Ok(s)
-    // }
-
-    // TODO
-    // /// Modify the grid spacing (quantization) while preserving the dimensions,
-    // /// and interpolates the new TEC values.
-    // ///
-    // /// This only modify the grid quantization, the map dimensions are preserved.
-    // ///
-    // /// ## Input
-    // /// - axis: [Axis] to be resampled
-    // /// - factor:
-    // ///    - > 1.0: spatial upscaling. The grid precision increases,
-    // /// we interpolate the TEC at new intermiediate coordinates.
-    // ///    - < 1.0: downscaling. The grid precision decreases.
-    // ///    - 0.0: invalid
-    // pub fn spatially_resampled(&self, axis: Axis, factor: f64) -> Result<IONEX, Error> {
-    //     let mut s = self.clone();
-    //     s.spatial_resampling_mut(axis, factor)?;
     //     Ok(s)
     // }
 
@@ -798,62 +817,189 @@ impl IONEX {
         Box::new(self.record.map.keys().map(|k| k.epoch).unique().sorted())
     }
 
-    // TODO
-    // /// Modify the grid spacing (quantization) while preserving the dimensions,
-    // /// and interpolates the TEC values.
-    // ///
-    // /// This only modify the grid quantization, the map dimensions are preserved.
-    // ///
-    // /// ## Input
-    // /// - axis: [Axis] to be resampled
-    // /// - factor:
-    // ///    - > 1.0: upscaling
-    // ///    - < 1.0: downscaling
-    // ///    - 0.0: invalid
-    // pub fn spatial_resampling_mut(&mut self, axis: Axis, factor: f64) -> Result<(), Error> {
-    //     // Stretch header specs
-    //     match axis {
-    //         Axis::Latitude => {
-    //             self.header.grid.latitude.resample_mut(factor)?;
-    //         },
-    //         Axis::Longitude => {
-    //             self.header.grid.longitude.resample_mut(factor)?;
-    //         },
-    //         Axis::Altitude => {
-    //             self.header.grid.altitude.resample_mut(factor)?;
-    //         },
-    //         Axis::Planar => {
-    //             self.header.grid.latitude.resample_mut(factor)?;
-    //             self.header.grid.longitude.resample_mut(factor)?;
-    //         },
-    //         Axis::All => {
-    //             self.header.grid.latitude.resample_mut(factor)?;
-    //             self.header.grid.longitude.resample_mut(factor)?;
-    //             self.header.grid.altitude.resample_mut(factor)?;
-    //         },
-    //     }
+    /// Resamples this [IONEX] in time: a new map is produced every sampling period,
+    /// from the first map to the last map (included, if it lines up), each node
+    /// being interpolated with the [TemporalInterpolation] strategy of your choice.
+    /// The spatial grid is preserved. Omitted values remain omitted.
+    ///
+    /// This is both an upsampling (shorter period) and a downsampling (longer period)
+    /// operation. Downsampling simply selects the maps when they line up with the new period.
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use ionex::prelude::*;
+    ///
+    /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
+    ///     .unwrap();
+    ///
+    /// // reduce to a regional map (faster)
+    /// let roi = Rect::new(coord!(x: -10.0, y: 35.0), coord!(x: 30.0, y: 60.0));
+    /// let ionex = ionex.to_regional_ionex(roi.into()).unwrap();
+    ///
+    /// // 1 hour maps to 15 minutes maps
+    /// let resampled = ionex
+    ///     .temporally_resampled(Duration::from_seconds(900.0), TemporalInterpolation::Linear)
+    ///     .unwrap();
+    ///
+    /// assert_eq!(resampled.header.number_of_maps, 97);
+    /// assert_eq!(resampled.epoch_iter().count(), 97);
+    /// assert_eq!(resampled.header.sampling_period, Duration::from_seconds(900.0));
+    /// ```
+    pub fn temporally_resampled(
+        &self,
+        sampling_period: Duration,
+        method: TemporalInterpolation,
+    ) -> Result<IONEX, Error> {
+        if sampling_period <= Duration::ZERO {
+            return Err(Error::InvalidStretchFactor);
+        }
 
-    //     let lat_pairs = self.header.grid.latitude.quantize().tuple_windows();
-    //     let long_pairs = self.header.grid.longitude.quantize().tuple_windows();
+        let (first, last) = (
+            self.record
+                .first_epoch()
+                .ok_or(Error::OutsideTemporalBoundaries)?,
+            self.record
+                .last_epoch()
+                .ok_or(Error::OutsideTemporalBoundaries)?,
+        );
 
-    //     // applies the stretching
+        let mut record = Record::default();
 
-    //     // synchronous spatial interpolation
-    //     for epoch in self.epoch_iter() {
-    //         if factor > 1.0 {
-    //             // upscaling
-    //         } else {
-    //             // downscaling
-    //         }
-    //     }
+        // grid nodes, as described by the first map
+        let nodes = self
+            .record
+            .map
+            .keys()
+            .take_while(|k| k.epoch == first)
+            .map(|k| k.coordinates)
+            .collect::<Vec<_>>();
 
-    //     // saturate the possible overflows to the world map proj
+        let mut last_epoch = first;
 
-    //     Ok(())
-    // }
+        for epoch in TimeSeries::inclusive(first, last, sampling_period) {
+            for coordinates in nodes.iter() {
+                let point = Point::new(coordinates.longitude_ddeg(), coordinates.latitude_ddeg());
 
-    /// Upscale (upsample) or Downscale (downsample) this mutable [IONEX],
-    /// modifying the stretch on the temporal axis.
+                match self.interpolate(epoch, point, coordinates.altitude_km(), method) {
+                    Ok(tec) => {
+                        record.insert(
+                            Key {
+                                epoch,
+                                coordinates: *coordinates,
+                            },
+                            tec,
+                        );
+                    },
+                    Err(Error::MissingData) => {},
+                    Err(e) => return Err(e),
+                }
+            }
+
+            last_epoch = epoch;
+        }
+
+        let mut ionex = self.with_record(record);
+        ionex.header.sampling_period = sampling_period;
+        ionex.header.epoch_of_first_map = first;
+        ionex.header.epoch_of_last_map = last_epoch;
+        ionex.header.number_of_maps = ionex.epoch_iter().count() as u32;
+
+        Ok(ionex)
+    }
+
+    /// Resamples this [IONEX] in space: the grid spacing is modified (both
+    /// latitude and longitude, in degrees) while the map boundaries are preserved,
+    /// and the TEC (and RMS) is interpolated at every new grid node, for every map
+    /// (and every altitude layer of 3D maps). The temporal axis is preserved.
+    /// Omitted values remain omitted (the 4 surrounding nodes must be defined).
+    ///
+    /// The spacings are absolute values, the axes orientations are preserved, and
+    /// they must divide the latitude and longitude ranges.
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use ionex::prelude::*;
+    ///
+    /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
+    ///     .unwrap();
+    ///
+    /// // reduce to a regional map (faster)
+    /// let roi = Rect::new(coord!(x: -10.0, y: 35.0), coord!(x: 30.0, y: 60.0));
+    /// let regional = ionex.to_regional_ionex(roi.into()).unwrap();
+    ///
+    /// // 2.5°x5° grid to 0.5°x0.5° grid
+    /// let resampled = regional.spatially_resampled(0.5, 0.5).unwrap();
+    /// assert_eq!(resampled.header.grid.latitude.spacing, -0.5);
+    /// assert_eq!(resampled.header.grid.longitude.spacing, 0.5);
+    ///
+    /// let noon = Epoch::from_str("2022-01-02T12:00:00 UTC").unwrap();
+    /// let toulouse = Point::new(1.5, 43.5);
+    ///
+    /// // new grid node
+    /// let key = Key::from_decimal_degrees_km(noon, 43.5, 1.5, 350.0);
+    /// let tec = resampled.record.get(&key).unwrap();
+    ///
+    /// assert!((tec.tecu() - ionex.tec_at(noon, toulouse).unwrap().tecu()).abs() < 1E-6);
+    /// ```
+    pub fn spatially_resampled(
+        &self,
+        latitude_spacing_deg: f64,
+        longitude_spacing_deg: f64,
+    ) -> Result<IONEX, Error> {
+        let grid = &self.header.grid;
+
+        let resampled = |linspace: &Linspace, spacing: f64| {
+            let spacing = if linspace.spacing < 0.0 {
+                -spacing.abs()
+            } else {
+                spacing.abs()
+            };
+
+            Linspace::new(linspace.start, linspace.end, spacing)
+                .map_err(|_| Error::InvalidGridSpacing)
+        };
+
+        let new_grid = Grid {
+            latitude: resampled(&grid.latitude, latitude_spacing_deg)?,
+            longitude: resampled(&grid.longitude, longitude_spacing_deg)?,
+            altitude: grid.altitude,
+        };
+
+        let mut record = Record::default();
+
+        for epoch in self.epoch_iter() {
+            for altitude in new_grid.altitude.quantize() {
+                for latitude in new_grid.latitude.quantize() {
+                    for longitude in new_grid.longitude.quantize() {
+                        let point = Point::new(longitude.real_value(), latitude.real_value());
+
+                        match self.spatial_tec(epoch, point, altitude.real_value()) {
+                            Ok(tec) => {
+                                record.insert(
+                                    Key {
+                                        epoch,
+                                        coordinates: QuantizedCoordinates::from_quantized(
+                                            latitude, longitude, altitude,
+                                        ),
+                                    },
+                                    tec,
+                                );
+                            },
+                            Err(Error::MissingData) => {},
+                            Err(e) => return Err(e),
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut ionex = self.with_record(record);
+        ionex.header.grid = new_grid;
+        Ok(ionex)
+    }
+
+    /// Upscale (upsample) or Downscale (downsample) this mutable [IONEX] on the temporal axis,
+    /// using linear temporal interpolation. See [Self::temporally_resampled] for more options.
     ///
     /// ## Input
     /// - factor: a positive finite number
@@ -862,21 +1008,12 @@ impl IONEX {
     ///    - and 1.5 means +50% sample rate increase.
     ///    - <1.0: downscaling case. For example, 0.5 means /2 sample rate decrease (-50%).
     pub fn temporal_stretching_mut(&mut self, factor: f64) -> Result<(), Error> {
-        if !factor.is_normal() {
+        if !factor.is_normal() || factor < 0.0 {
             return Err(Error::InvalidStretchFactor);
         }
 
-        let new_dt = self.header.sampling_period * factor;
-
-        if factor > 1.0 {
-            // temporal upscaling
-        } else {
-            // temporal decimation
-        }
-
-        // update header
-        self.header.sampling_period = new_dt;
-
+        let sampling_period = self.header.sampling_period / factor;
+        *self = self.temporally_resampled(sampling_period, TemporalInterpolation::Linear)?;
         Ok(())
     }
 
@@ -917,234 +1054,519 @@ impl IONEX {
         self.header.timeseries()
     }
 
-    /// Designs a [MapCell] iterator (micro ROI following the grid quantization)
-    /// that allows micro interpolation.
+    /// Returns these coordinates (x: longitude, y: latitude, in decimal degrees)
+    /// with longitude wrapped into the longitude range of this map, when this map
+    /// covers the 360° longitude range. For example, 190° becomes -170°
+    /// on usual worldwide maps (that range from -180° to 180°).
+    /// Coordinates are returned unchanged otherwise.
+    pub fn wrapped_coordinates(&self, coordinates: Point<f64>) -> Point<f64> {
+        let longitudes = &self.header.grid.longitude;
+        let (min, max) = longitudes.minmax();
+
+        if (max - min - 360.0).abs() > 1.0E-9 {
+            return coordinates;
+        }
+
+        let mut longitude = coordinates.x();
+
+        if longitude < min || longitude > max {
+            longitude = (longitude - min).rem_euclid(360.0) + min;
+        }
+
+        Point::new(longitude, coordinates.y())
+    }
+
+    /// Builds the [MapCell] delimited by these grid nodes, which are reordered
+    /// whatever the axes orientation. Returns None if one of the 4 corners is not
+    /// defined (omitted data, or coordinates that do not exist).
+    fn quantized_map_cell(
+        &self,
+        epoch: Epoch,
+        latitudes: (Quantized, Quantized),
+        longitudes: (Quantized, Quantized),
+        altitude: Quantized,
+    ) -> Option<MapCell> {
+        let (north, south) = if latitudes.0 >= latitudes.1 {
+            (latitudes.0, latitudes.1)
+        } else {
+            (latitudes.1, latitudes.0)
+        };
+
+        let (west, east) = if longitudes.0 <= longitudes.1 {
+            (longitudes.0, longitudes.1)
+        } else {
+            (longitudes.1, longitudes.0)
+        };
+
+        let tec_point = |latitude: Quantized, longitude: Quantized| {
+            let key = Key {
+                epoch,
+                coordinates: QuantizedCoordinates::from_quantized(latitude, longitude, altitude),
+            };
+
+            let tec = self.record.get(&key)?;
+
+            Some(TecPoint {
+                tec: *tec,
+                point: Point::new(longitude.real_value(), latitude.real_value()),
+            })
+        };
+
+        Some(MapCell {
+            epoch,
+            north_east: tec_point(north, east)?,
+            north_west: tec_point(north, west)?,
+            south_east: tec_point(south, east)?,
+            south_west: tec_point(south, west)?,
+        })
+    }
+
+    /// Quantized altitude of the fixed altitude layer
+    /// (the only layer of 2D maps, the lowest layer of 3D maps).
+    fn fixed_altitude(&self) -> Quantized {
+        self.header
+            .grid
+            .altitude
+            .quantize()
+            .next()
+            .unwrap_or(Quantized::auto_scaled(self.header.grid.altitude.start))
+    }
+
+    /// Designs a [MapCell] iterator (smallest ROI following the grid quantization)
+    /// that allows local interpolation. [MapCell]s are returned in chronological order,
+    /// following the grid description (usually North to South and West to East).
+    /// In case of 3D maps, this iterates the fixed (first) altitude layer.
     pub fn map_cell_iter(&self) -> Box<dyn Iterator<Item = MapCell> + '_> {
-        let lat_pairs = self.header.grid.latitude.quantize().tuple_windows();
-        let long_pairs = self.header.grid.longitude.quantize().tuple_windows();
-
-        let fixed_altitude_km = self.header.grid.altitude.start;
-        let fixed_altitude_q = Quantized::auto_scaled(fixed_altitude_km);
-
         Box::new(
-            self.timeseries()
-                .cartesian_product(lat_pairs.cartesian_product(long_pairs))
-                .filter_map(move |(epoch, ((lat1, lat2), (long1, long2)))| {
-                    let northeast = Key {
-                        epoch,
-                        coordinates: QuantizedCoordinates::from_quantized(
-                            lat1,
-                            long1,
-                            fixed_altitude_q,
-                        ),
-                    };
-
-                    let northeast = self.record.get(&northeast)?;
-
-                    let northwest = Key {
-                        epoch,
-                        coordinates: QuantizedCoordinates::from_quantized(
-                            lat1,
-                            long2,
-                            fixed_altitude_q,
-                        ),
-                    };
-
-                    let northwest = self.record.get(&northwest)?;
-
-                    let southeast = Key {
-                        epoch,
-                        coordinates: QuantizedCoordinates::from_quantized(
-                            lat2,
-                            long2,
-                            fixed_altitude_q,
-                        ),
-                    };
-
-                    let southeast = self.record.get(&southeast)?;
-
-                    let southwest = Key {
-                        epoch,
-                        coordinates: QuantizedCoordinates::from_quantized(
-                            lat2,
-                            long2,
-                            fixed_altitude_q,
-                        ),
-                    };
-
-                    let southwest = self.record.get(&southwest)?;
-
-                    Some(MapCell {
-                        epoch,
-                        north_east: TecPoint {
-                            tec: *northeast,
-                            point: Point::new(long1.real_value(), lat1.real_value()),
-                        },
-                        north_west: TecPoint {
-                            tec: *northwest,
-                            point: Point::new(long2.real_value(), lat1.real_value()),
-                        },
-                        south_east: TecPoint {
-                            tec: *southeast,
-                            point: Point::new(long1.real_value(), lat2.real_value()),
-                        },
-                        south_west: TecPoint {
-                            tec: *southwest,
-                            point: Point::new(long2.real_value(), lat2.real_value()),
-                        },
-                    })
-                }),
+            self.epoch_iter()
+                .flat_map(move |epoch| self.synchronous_map_cell_iter(epoch)),
         )
     }
 
-    // /// Returns a [Cell3x3] iterator for each 3x3 region at a specific point in time
-    // pub fn synchronous_map_cell3x3_iter(&self, epoch: Epoch) -> Box<dyn Iterator<Item = Cell3x3> + '_> {
-    //     Box::new(
-    //         self.map_cell3x3_iter().filter(move |cell| cell.center.epoch == epoch)
-    //     )
-    // }
+    /// Obtain a synchronous [MapCell] iterator at specific point in time,
+    /// that must exist in this [IONEX]. See [Self::map_cell_iter].
+    pub fn synchronous_map_cell_iter(
+        &self,
+        epoch: Epoch,
+    ) -> Box<dyn Iterator<Item = MapCell> + '_> {
+        let altitude = self.fixed_altitude();
 
-    /// Form a possibly interpolated [MapCell] at specified point in time, wrapping this ROI.
-    /// The ROI is described by a [Geometry], which can be complex.
-    /// Unlike [Self::unitary_roi_at], the returned [MapCell] may not be a map quantization cell,
-    /// but might result of the combination of several, in case the ROI does not fit in a single quantization step.
+        let lat_pairs = self.header.grid.latitude.quantize().tuple_windows();
+        let long_pairs = self
+            .header
+            .grid
+            .longitude
+            .quantize()
+            .tuple_windows()
+            .collect::<Vec<_>>();
+
+        Box::new(lat_pairs.cartesian_product(long_pairs).filter_map(
+            move |(latitudes, longitudes)| {
+                self.quantized_map_cell(epoch, latitudes, longitudes, altitude)
+            },
+        ))
+    }
+
+    /// Returns the [MapCell] (grid quantum) that contains these coordinates
+    /// (x: longitude, y: latitude in decimal degrees), at this [Epoch] that must exist
+    /// in this [IONEX], and for the fixed altitude layer.
+    /// This is a direct lookup (no iteration). Longitudes are wrapped on 360° maps
+    /// (see [Self::wrapped_coordinates]).
     ///
-    /// ## Input
-    /// - epoch: the returned cell will be synchronous to this [Epoch].
-    /// If this instant lines up with the temporal axis, the process will not involve temporal interpolation.
-    /// When the instant does not line up with the temporal axis, we will use temporal interpolation,
-    /// to deduce the most precise and correct values.
-    /// In any case, this instant must fit within the temporal axis, after the first [Epoch]
-    /// and before the last [Epoch] described in [Header].
+    /// Returns None when the coordinates are outside this map, when this [Epoch]
+    /// does not exist, or if one of the corners was omitted.
     ///
-    /// - roi: [Geometry] defining the local region we want to wrap (fully contained by returned cell).
-    pub fn roi_at(&self, epoch: Epoch, roi: Geometry) -> Result<MapCell, Error> {
-        // determine whether this is within the temporal axis
-        if epoch < self.header.epoch_of_first_map || epoch > self.header.epoch_of_last_map {
-            return Err(Error::OutsideTemporalBoundaries);
-        }
+    /// ```
+    /// use std::str::FromStr;
+    /// use ionex::prelude::*;
+    ///
+    /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
+    ///     .unwrap();
+    ///
+    /// let noon = Epoch::from_str("2022-01-02T12:00:00 UTC").unwrap();
+    ///
+    /// // Toulouse (France): x = longitude, y = latitude
+    /// let toulouse = Point::new(1.44, 43.6);
+    ///
+    /// let cell = ionex.map_cell_at(noon, toulouse).unwrap();
+    ///
+    /// assert_eq!(cell.south_west.point, Point::new(0.0, 42.5));
+    /// assert_eq!(cell.north_east.point, Point::new(5.0, 45.0));
+    /// assert!(cell.contains(&Geometry::Point(toulouse)));
+    /// ```
+    pub fn map_cell_at(&self, epoch: Epoch, coordinates: Point<f64>) -> Option<MapCell> {
+        self.altitude_map_cell_at(epoch, coordinates, self.fixed_altitude())
+    }
 
-        // convert the ROI to its bounding rectangle
-        let roi = roi.bounding_rect().ok_or(Error::UndefinedBoundaries)?;
+    /// [MapCell] that contains these coordinates, at this [Epoch]
+    /// that must exist, for this altitude layer.
+    fn altitude_map_cell_at(
+        &self,
+        epoch: Epoch,
+        coordinates: Point<f64>,
+        altitude: Quantized,
+    ) -> Option<MapCell> {
+        let coordinates = self.wrapped_coordinates(coordinates);
 
-        // apply the modulo operation in case provided coordinates are "incorrect".
-        // in case of worldwide ionex, this makes this operation work at all times, conveniently.
-        let roi = Rect::new(
-            coord!(x: roi.min().x, y: roi.min().y),
-            coord!(x: roi.max().x, y: roi.max().y),
-        );
+        let latitudes = self
+            .header
+            .grid
+            .latitude
+            .quantized_bracket(coordinates.y())?;
 
-        // check the ROI is within the map.
-        // in case of regional IONEX, we might not be able to return
-        if !self.bounding_rect_degrees().contains(&roi) {
+        let longitudes = self
+            .header
+            .grid
+            .longitude
+            .quantized_bracket(coordinates.x())?;
+
+        self.quantized_map_cell(epoch, latitudes, longitudes, altitude)
+    }
+
+    /// Spatial interpolation at an [Epoch] that must exist in this [IONEX],
+    /// at any coordinates and altitude within this map.
+    /// For 3D maps, the two surrounding altitude layers are linearly interpolated.
+    fn spatial_tec(
+        &self,
+        epoch: Epoch,
+        coordinates: Point<f64>,
+        altitude_km: f64,
+    ) -> Result<TEC, Error> {
+        let grid = &self.header.grid;
+        let coordinates = self.wrapped_coordinates(coordinates);
+
+        if !grid.latitude.contains(coordinates.y()) || !grid.longitude.contains(coordinates.x()) {
             return Err(Error::OutsideSpatialBoundaries);
         }
 
-        // determine whether this lies within a single element or not
-        let mut unitary_element = true;
+        let (alt0, alt1) = grid
+            .altitude
+            .quantized_bracket(altitude_km)
+            .ok_or(Error::OutsideSpatialBoundaries)?;
 
-        if roi.width() > self.header.grid.longitude.spacing {
-            unitary_element = false;
+        let layer_tec = |altitude: Quantized| {
+            self.altitude_map_cell_at(epoch, coordinates, altitude)
+                .ok_or(Error::MissingData)?
+                .spatial_tec_interp(coordinates)
+        };
+
+        let tec0 = layer_tec(alt0)?;
+
+        if alt0 == alt1 {
+            return Ok(tec0);
         }
 
-        if roi.height() > self.header.grid.latitude.spacing {
-            unitary_element = false;
+        let tec1 = layer_tec(alt1)?;
+
+        let (z0, z1) = (alt0.real_value(), alt1.real_value());
+        Ok(tec0.lerp(&tec1, (altitude_km - z0) / (z1 - z0)))
+    }
+
+    /// Interpolates the [TEC] at any instant, coordinates and altitude.
+    fn interpolate(
+        &self,
+        epoch: Epoch,
+        coordinates: Point<f64>,
+        altitude_km: f64,
+        method: TemporalInterpolation,
+    ) -> Result<TEC, Error> {
+        let (t0, t1) = self
+            .record
+            .epoch_bracket(epoch)
+            .ok_or(Error::OutsideTemporalBoundaries)?;
+
+        if t0 == t1 {
+            return self.spatial_tec(t0, coordinates, altitude_km);
         }
 
-        // determine whether we need temporal interpolation or not
-        let mut needs_temporal_interp = true;
-        let mut t = self.header.epoch_of_first_map;
+        let dt = (t1 - t0).to_seconds();
+        let w = (epoch - t0).to_seconds() / dt;
 
-        while t < self.header.epoch_of_last_map {
-            if t == epoch {
-                needs_temporal_interp = false;
-                break;
-            }
+        match method {
+            TemporalInterpolation::NearestMap => {
+                let nearest = if w <= 0.5 { t0 } else { t1 };
+                self.spatial_tec(nearest, coordinates, altitude_km)
+            },
+            TemporalInterpolation::Linear => {
+                let tec0 = self.spatial_tec(t0, coordinates, altitude_km)?;
+                let tec1 = self.spatial_tec(t1, coordinates, altitude_km)?;
+                Ok(tec0.lerp(&tec1, w))
+            },
+            TemporalInterpolation::RotatedMaps => {
+                let rotated = |t: Epoch| {
+                    let shift_deg =
+                        (epoch - t).to_seconds() * TemporalInterpolation::SUN_FIXED_ROTATION_DEG_S;
+                    Point::new(coordinates.x() + shift_deg, coordinates.y())
+                };
 
-            t += self.header.sampling_period;
+                let tec0 = self.spatial_tec(t0, rotated(t0), altitude_km)?;
+                let tec1 = self.spatial_tec(t1, rotated(t1), altitude_km)?;
+                Ok(tec0.lerp(&tec1, w))
+            },
+        }
+    }
+
+    /// Interpolates the [TEC] at any instant within the temporal axis,
+    /// and any coordinates (x: longitude, y: latitude in decimal degrees) within this map,
+    /// using the [TemporalInterpolation] strategy recommended by the IONEX specifications
+    /// ([TemporalInterpolation::RotatedMaps]). See [Self::tec_at_with] to select another strategy.
+    ///
+    /// Spatial interpolation uses the 4 surrounding grid nodes (see [MapCell::spatial_tec_interp]),
+    /// grid nodes are returned as is. The TEC RMS is interpolated as well, when defined.
+    ///
+    /// This applies to 2D maps (or the fixed altitude layer). For 3D maps, you must
+    /// specify the altitude with [Self::volumetric_tec_at], otherwise this returns
+    /// [Error::AltitudeRequired].
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use ionex::prelude::*;
+    ///
+    /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
+    ///     .unwrap();
+    ///
+    /// // x: longitude, y: latitude
+    /// let toulouse = Point::new(1.44, 43.6);
+    ///
+    /// // anywhere in time
+    /// let t = Epoch::from_str("2022-01-02T12:34:56 UTC").unwrap();
+    /// let tec = ionex.tec_at(t, toulouse).unwrap();
+    /// assert!(tec.tecu() > 0.0);
+    ///
+    /// // on the grid: no interpolation
+    /// let noon = Epoch::from_str("2022-01-02T12:00:00 UTC").unwrap();
+    /// let node = Point::new(0.0, 42.5);
+    ///
+    /// let key = Key::from_decimal_degrees_km(noon, 42.5, 0.0, 350.0);
+    /// let expected = ionex.record.get(&key).unwrap();
+    ///
+    /// assert_eq!(ionex.tec_at(noon, node).unwrap().tecu(), expected.tecu());
+    ///
+    /// // outside of the temporal axis
+    /// let t = Epoch::from_str("2022-01-04T00:00:00 UTC").unwrap();
+    /// assert!(ionex.tec_at(t, toulouse).is_err());
+    /// ```
+    pub fn tec_at(&self, epoch: Epoch, coordinates: Point<f64>) -> Result<TEC, Error> {
+        self.tec_at_with(epoch, coordinates, TemporalInterpolation::default())
+    }
+
+    /// Interpolates the [TEC] at any instant and coordinates, like [Self::tec_at],
+    /// using the [TemporalInterpolation] strategy of your choice.
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use ionex::prelude::*;
+    ///
+    /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
+    ///     .unwrap();
+    ///
+    /// let toulouse = Point::new(1.44, 43.6);
+    /// let t = Epoch::from_str("2022-01-02T12:30:00 UTC").unwrap();
+    ///
+    /// let linear = ionex.tec_at_with(t, toulouse, TemporalInterpolation::Linear).unwrap();
+    /// let rotated = ionex.tec_at_with(t, toulouse, TemporalInterpolation::RotatedMaps).unwrap();
+    /// let nearest = ionex.tec_at_with(t, toulouse, TemporalInterpolation::NearestMap).unwrap();
+    /// ```
+    pub fn tec_at_with(
+        &self,
+        epoch: Epoch,
+        coordinates: Point<f64>,
+        method: TemporalInterpolation,
+    ) -> Result<TEC, Error> {
+        if self.is_3d() {
+            return Err(Error::AltitudeRequired);
         }
 
-        // determine whether we need spatial interpolation or not.
-        // we don't need spatial interpolation when the ROI height and width
-        // perfectly line up with the IONEX grid.
-        let (width, height) = (roi.width(), roi.height());
+        self.interpolate(
+            epoch,
+            coordinates,
+            self.fixed_altitude().real_value(),
+            method,
+        )
+    }
 
-        let (needs_lat_interp, needs_long_interp) = (
-            height.rem_euclid(self.header.grid.latitude.spacing) == 0.0,
-            width.rem_euclid(self.header.grid.longitude.spacing) == 0.0,
-        );
+    /// Interpolates the [TEC] at any instant, coordinates (x: longitude, y: latitude in decimal
+    /// degrees) and altitude (in kilometers) within the volume described by a 3D IONEX.
+    /// The 4 surrounding nodes of the two surrounding altitude layers are used
+    /// (trilinear interpolation), and the [TemporalInterpolation] strategy of your choice.
+    ///
+    /// This also applies to 2D maps, but the altitude must then match the fixed altitude
+    /// of the map, otherwise this returns [Error::OutsideSpatialBoundaries].
+    pub fn volumetric_tec_at(
+        &self,
+        epoch: Epoch,
+        coordinates: Point<f64>,
+        altitude_km: f64,
+        method: TemporalInterpolation,
+    ) -> Result<TEC, Error> {
+        self.interpolate(epoch, coordinates, altitude_km, method)
+    }
 
-        if unitary_element {
-            // this can be reduced to a unitary MapCell
-        } else {
-            if needs_temporal_interp {
-                if needs_lat_interp || needs_long_interp {
-                    panic!("not supported yet");
-                } else {
-                }
-            } else {
-                if needs_lat_interp || needs_long_interp {
-                    panic!("not supported yet");
-                } else {
-                }
-            }
-        }
+    /// Returns the Ionospheric Pierce Point ([IPP]) of the line of sight from this
+    /// receiver (x: longitude, y: latitude in decimal degrees), with given elevation
+    /// and azimuth (in degrees), using the single layer model described by this [IONEX]:
+    /// the shell altitude is the fixed altitude of the map,
+    /// and the Earth radius is [Header::base_radius_km].
+    pub fn ionospheric_pierce_point(
+        &self,
+        receiver: Point<f64>,
+        elevation_deg: f64,
+        azimuth_deg: f64,
+    ) -> Result<IPP, Error> {
+        IPP::new(
+            receiver,
+            elevation_deg,
+            azimuth_deg,
+            self.header.base_radius_km as f64,
+            self.fixed_altitude().real_value(),
+        )
+    }
 
-        // TODO
-        Err(Error::TemporalMismatch)
+    /// Returns the Slant [TEC] along the line of sight from this receiver
+    /// (x: longitude, y: latitude in decimal degrees) with given elevation and azimuth (in degrees),
+    /// at any instant within the temporal axis.
+    ///
+    /// The vertical TEC is interpolated at the Ionospheric Pierce Point ([Self::ionospheric_pierce_point])
+    /// with [Self::tec_at] and converted to slant TEC with the single layer obliquity factor
+    /// (1/cos(z'), see [IPP::obliquity_factor]). The RMS is scaled as well.
+    /// This only applies to 2D maps.
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use ionex::prelude::*;
+    ///
+    /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
+    ///     .unwrap();
+    ///
+    /// let t = Epoch::from_str("2022-01-02T12:34:56 UTC").unwrap();
+    /// let toulouse = Point::new(1.44, 43.6);
+    ///
+    /// // satellite at 30° elevation, South-East
+    /// let stec = ionex.slant_tec_at(t, toulouse, 30.0, 135.0).unwrap();
+    ///
+    /// // satellite at zenith: STEC is VTEC
+    /// let stec = ionex.slant_tec_at(t, toulouse, 90.0, 0.0).unwrap();
+    /// let vtec = ionex.tec_at(t, toulouse).unwrap();
+    /// assert!((stec.tecu() - vtec.tecu()).abs() < 1E-6);
+    ///
+    /// // ionospheric delay on GPS L1 (meters)
+    /// let delay_m = stec.ionospheric_delay_m(1575.42E6);
+    /// ```
+    pub fn slant_tec_at(
+        &self,
+        epoch: Epoch,
+        receiver: Point<f64>,
+        elevation_deg: f64,
+        azimuth_deg: f64,
+    ) -> Result<TEC, Error> {
+        let ipp = self.ionospheric_pierce_point(receiver, elevation_deg, azimuth_deg)?;
+        let vtec = self.tec_at(epoch, ipp.coordinates)?;
+        Ok(vtec.scaled(ipp.obliquity_factor()))
+    }
+
+    /// Returns the ionospheric delay (in meters) experienced by a signal of this
+    /// frequency (in Hz), along the line of sight from this receiver
+    /// (x: longitude, y: latitude in decimal degrees) with given elevation and azimuth
+    /// (in degrees), at any instant within the temporal axis.
+    /// See [Self::slant_tec_at] and [TEC::ionospheric_delay_m].
+    pub fn ionospheric_delay_m(
+        &self,
+        epoch: Epoch,
+        receiver: Point<f64>,
+        elevation_deg: f64,
+        azimuth_deg: f64,
+        frequency_hz: f64,
+    ) -> Result<f64, Error> {
+        let stec = self.slant_tec_at(epoch, receiver, elevation_deg, azimuth_deg)?;
+        Ok(stec.ionospheric_delay_m(frequency_hz))
+    }
+
+    /// Form a possibly interpolated [MapCell] at specified point in time, wrapping this ROI.
+    /// The ROI is described by a [Geometry], which can be complex: the returned [MapCell]
+    /// is its bounding rectangle, and the TEC is interpolated at each corner.
+    /// Unlike [Self::unitary_roi_at], the returned [MapCell] may not be a grid quantum,
+    /// it may be smaller or wider.
+    ///
+    /// ## Input
+    /// - epoch: the returned cell will be synchronous to this [Epoch], that must be within
+    /// the temporal axis. When it does not line up with a map, the maps are linearly
+    /// interpolated in time ([TemporalInterpolation::Linear]).
+    /// - roi: [Geometry] defining the local region we want to wrap (in decimal degrees),
+    /// that must be within this map.
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use ionex::prelude::*;
+    ///
+    /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
+    ///     .unwrap();
+    ///
+    /// let t = Epoch::from_str("2022-01-02T12:30:00 UTC").unwrap();
+    ///
+    /// // France (roughly)
+    /// let roi = Rect::new(coord!(x: -5.0, y: 42.0), coord!(x: 8.0, y: 51.0));
+    ///
+    /// let cell = ionex.roi_at(t, Geometry::Rect(roi)).unwrap();
+    /// assert_eq!(cell.bounding_rect_degrees(), roi);
+    /// ```
+    pub fn roi_at(&self, epoch: Epoch, roi: Geometry) -> Result<MapCell, Error> {
+        let roi = roi.bounding_rect().ok_or(Error::UndefinedBoundaries)?;
+
+        let ((ne_lat, ne_long), (se_lat, se_long), (sw_lat, sw_long), (nw_lat, nw_long)) =
+            rectangle_quadrant_decomposition(roi);
+
+        let altitude_km = self.fixed_altitude().real_value();
+
+        let tec_point = |latitude: f64, longitude: f64| -> Result<TecPoint, Error> {
+            let point = Point::new(longitude, latitude);
+
+            Ok(TecPoint {
+                point,
+                tec: self.interpolate(epoch, point, altitude_km, TemporalInterpolation::Linear)?,
+            })
+        };
+
+        Ok(MapCell {
+            epoch,
+            north_east: tec_point(ne_lat, ne_long)?,
+            north_west: tec_point(nw_lat, nw_long)?,
+            south_east: tec_point(se_lat, se_long)?,
+            south_west: tec_point(sw_lat, sw_long)?,
+        })
     }
 
     /// Obtain the [MapCell] (smallest map ROI) at provided point in time and containing provided coordinates.
-    /// We will select the synchronous [MapCell] that contains the given coordinates.
     ///
     /// ## Input
     /// - epoch: [Epoch] that must fit within the temporal axis.
-    /// If this instant aligns with the sampling rate, this process will not require temporal interpolation.
-    /// If the instant does not line up with the sampling rate, we will return a temporally interpolated ROI
-    /// at the specified point in time.
-    /// - contains: [Geometry] to be fully contained by the returned
-    /// If the coordinates align with the grid, this process will not require spatial interpolation.
+    /// If this instant exists in this [IONEX], this process does not require temporal interpolation.
+    /// Otherwise, we return the [MapCell] linearly interpolated in time
+    /// (see [MapCell::temporally_interpolated]), between the two surrounding maps.
+    /// - coordinates: [Point] (x: longitude, y: latitude in decimal degrees) that must be
+    /// within this map.
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use ionex::prelude::*;
+    ///
+    /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
+    ///     .unwrap();
+    ///
+    /// let t = Epoch::from_str("2022-01-02T12:30:00 UTC").unwrap();
+    /// let cell = ionex.unitary_roi_at(t, Point::new(1.44, 43.6)).unwrap();
+    /// assert_eq!(cell.epoch, t);
+    /// ```
     pub fn unitary_roi_at(&self, epoch: Epoch, coordinates: Point<f64>) -> Option<MapCell> {
-        // determine whether we need temporal interpolation or not
-        let mut needs_temporal_interp = true;
-        let mut t = self.header.epoch_of_first_map;
+        let (t0, t1) = self.record.epoch_bracket(epoch)?;
 
-        while t < self.header.epoch_of_last_map {
-            if t == epoch {
-                needs_temporal_interp = false;
-                break;
-            }
+        let cell0 = self.map_cell_at(t0, coordinates)?;
 
-            t += self.header.sampling_period;
+        if t0 == t1 {
+            return Some(cell0);
         }
 
-        let coordinates = Geometry::Point(coordinates);
-
-        if needs_temporal_interp {
-            for (t0, t1) in self.epoch_iter().tuple_windows() {
-                if t0 < epoch && t1 > epoch {
-                    for (cell0, cell1) in self
-                        .synchronous_map_cell_iter(t0)
-                        .zip(self.synchronous_map_cell_iter(t1))
-                    {
-                        if cell0.contains(&coordinates) && cell1.contains(&coordinates) {
-                            // TODO
-                            // if let Ok(interpolated) = cell0.temporally_interpolated(epoch, &cell1)? {
-                            //     return Some(interpolated);
-                            // }
-                        }
-                    }
-                }
-            }
-        } else {
-            for cell in self.synchronous_map_cell_iter(epoch) {
-                if cell.contains(&coordinates) {
-                    return Some(cell);
-                }
-            }
-        }
-
-        None
+        let cell1 = self.map_cell_at(t1, coordinates)?;
+        cell0.temporally_interpolated(epoch, &cell1).ok()
     }
 
     /// Obtain the best suited [MapCell] spatially wrapping this Geometry that contains following [Geometry].
@@ -1161,121 +1583,6 @@ impl IONEX {
 
         None
     }
-
-    /// Obtain a synchronous [MapCell] iterator at specific point in time.
-    pub fn synchronous_map_cell_iter(
-        &self,
-        epoch: Epoch,
-    ) -> Box<dyn Iterator<Item = MapCell> + '_> {
-        Box::new(
-            self.map_cell_iter()
-                .filter_map(move |v| if v.epoch == epoch { Some(v) } else { None }),
-        )
-    }
-
-    // /// Interpolate TEC values for all discrete coordinates described by the following [LineString]
-    // /// (in decimal degrees), at specific point in time that must exist within this record.
-    // /// Otherwise, you should use [Self::temporal_spatial_area_interpolation] to also
-    // /// use temporal interpolation from two existing data points.
-    // /// ```
-    // /// use std::str::FromStr;
-    // /// use ionex::prelude::{IONEX, Epoch, LineString, coord, Contains};
-    // ///
-    // /// let ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz")
-    // ///    .unwrap();
-    // ///
-    // /// // ROI (ddeg) must be within borders
-    // /// let roi_ddeg = LineString::new(vec![
-    // ///     coord! { x: -50.0, y: -23.0 },
-    // ///     coord! { x: -50.25, y: -23.1 },
-    // ///     coord! { x: -50.5, y: -23.2 },
-    // /// ]);
-    // ///
-    // /// // you can double check that
-    // /// assert!(ionex.bounding_rect_degrees().contains(&roi_ddeg));
-    // ///
-    // /// // Epoch must exist in the record
-    // /// let noon = Epoch::from_str("2022-01-02T12:00:00 UTC")
-    // ///     .unwrap();
-    // ///
-    // ///
-    // /// ```
-    // pub fn spatial_area_interpolation(
-    //     &self,
-    //     area: &LineString,
-    //     epoch: Epoch,
-    // ) -> BTreeMap<Key, TEC> {
-    //     let mut values = BTreeMap::new();
-
-    //     let fixed_altitude_km = self.header.grid.altitude.start;
-
-    //     // for all requested coordinates
-    //     for point in area.points() {
-    //         let geo = Geometry::Point(point);
-
-    //         let key = Key::from_decimal_degrees_km(epoch, point.y(), point.x(), fixed_altitude_km);
-
-    //         for cell in self.synchronous_map_cell_iter(epoch) {
-    //             if cell.contains(&geo) {
-    //                 let tec = cell.spatial_interpolation(point);
-    //                 values.insert(key, tec);
-    //             }
-    //         }
-    //     }
-
-    //     values
-    // }
-
-    // /// Interpolate TEC values for all discrete coordinates described by the following [LineString]
-    // /// (in decimal degrees), at specific point in time that does exist within this record.
-    // /// We will interpolate the two neighbouring data points, which is not feasible at day boundaries.
-    // pub fn temporal_spatial_area_interpolation(
-    //     &self,
-    //     area: &LineString,
-    //     epoch: Epoch,
-    // ) -> BTreeMap<Key, TEC> {
-    //     let mut values = BTreeMap::new();
-
-    //     let (min_t, max_t) = (
-    //         (epoch - self.header.sampling_period),
-    //         (epoch + self.header.sampling_period),
-    //     );
-
-    //     let (min_t, max_t) = (
-    //         min_t.round(self.header.sampling_period),
-    //         max_t.round(self.header.sampling_period),
-    //     );
-
-    //     // for all requested coordinates
-    //     for point in area.points() {
-    //         let geo = Geometry::Point(point);
-
-    //         for cell_t0 in self.synchronous_map_cell_iter(min_t) {
-    //             if cell_t0.contains(&geo) {
-    //                 for cell_t1 in self.synchronous_map_cell_iter(max_t) {
-    //                     if cell_t1.contains(&geo) {
-    //                         if let Some(interpolated) =
-    //                             cell_t0.temporal_spatial_interpolation(epoch, point, &cell_t1)
-    //                         {
-    //                             let key = Key {
-    //                                 epoch,
-    //                                 coordinates: QuantizedCoordinates::from_decimal_degrees(
-    //                                     point.y(),
-    //                                     point.x(),
-    //                                     self.header.grid.altitude.start,
-    //                                 ),
-    //                             };
-
-    //                             values.insert(key, interpolated);
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     values
-    // }
 }
 
 /// Merge two [IONEX] structures into one.

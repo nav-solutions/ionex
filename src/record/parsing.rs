@@ -175,7 +175,9 @@ impl Record {
                                     // TODO: Height map not supported.
                                 } else {
                                     if let Some(tec) = record.get_mut(&key) {
-                                        *tec = tec.with_tecu(value as f64);
+                                        // RMS map came first: preserve it
+                                        // but apply the TEC scaling
+                                        tec.set_quantized_tecu(value, exponent);
                                     } else {
                                         let tec = TEC::from_quantized(value, exponent);
                                         record.insert(key, tec);

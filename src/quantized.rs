@@ -39,14 +39,31 @@ impl Ord for Quantized {
 }
 
 impl Quantized {
-    /// Determines best suited exponent to quantize given value
+    /// Maximal number of decimal digits we will ever preserve.
+    /// This is far beyond the precision of any IONEX content
+    /// and bounds the quantization of computed (interpolated) values,
+    /// that otherwise carry all the floating point noise.
+    pub(crate) const MAX_EXPONENT: i8 = 15;
+
+    /// Determines best suited exponent to quantize given value.
+    /// Non finite values (NaN, infinite) are not quantizable and return 0.
+    /// The exponent is bounded so the quantized value always fits in a i64.
     pub(crate) fn find_exponent(value: f64) -> i8 {
+        if !value.is_finite() {
+            return 0;
+        }
+
         let mut val = value;
         let mut exponent = 0;
 
-        while val.fract() != 0.0 {
+        while val.fract() != 0.0 && exponent < Self::MAX_EXPONENT {
             val *= 10.0;
             exponent += 1;
+        }
+
+        // make sure the scaled value fits in a i64
+        while exponent > 0 && (value * 10.0_f64.powi(exponent as i32)).abs() >= i64::MAX as f64 {
+            exponent -= 1;
         }
 
         exponent
@@ -82,6 +99,34 @@ mod test {
         assert_eq!(Quantized::find_exponent(1.25), 2);
         assert_eq!(Quantized::find_exponent(0.25), 2);
         assert_eq!(Quantized::find_exponent(0.333), 3);
+
+        // non quantizable values
+        assert_eq!(Quantized::find_exponent(f64::NAN), 0);
+        assert_eq!(Quantized::find_exponent(f64::INFINITY), 0);
+        assert_eq!(Quantized::find_exponent(f64::NEG_INFINITY), 0);
+
+        // floating point noise is bounded
+        assert!(Quantized::find_exponent(0.1 + 0.2) <= Quantized::MAX_EXPONENT);
+        assert!(Quantized::find_exponent(1.0 / 3.0) <= Quantized::MAX_EXPONENT);
+        assert!(Quantized::find_exponent(1.0E-30) <= Quantized::MAX_EXPONENT);
+    }
+
+    #[test]
+    fn test_auto_scaled_noisy_values() {
+        for value in [
+            0.1 + 0.2,
+            1.0 / 3.0,
+            23.456789123456789,
+            -12.000000000000002,
+        ] {
+            let q = Quantized::auto_scaled(value);
+            assert!(
+                (q.real_value() - value).abs() < 1.0E-12,
+                "{} -> {:?}",
+                value,
+                q
+            );
+        }
     }
 
     #[test]
