@@ -4,12 +4,10 @@ use crate::prelude::{Epoch, ParsingError};
 // use std::str::FromStr;
 
 /// Formats given epoch to string, matching standard specifications
+/// EPOCH OF FIRST MAP / EPOCH OF LAST MAP (6I6), same layout as the map epochs
 pub(crate) fn format_header(epoch: Epoch) -> String {
     let (y, m, d, hh, mm, ss, _nanos) = epoch.to_gregorian(epoch.time_scale);
-    format!(
-        "{:04}   {:>2}    {:>2}    {:>2}    {:>2}    {:>2}",
-        y, m, d, hh, mm, ss
-    )
+    format!("{:>6}{:>6}{:>6}{:>6}{:>6}{:>6}", y, m, d, hh, mm, ss)
 }
 
 pub(crate) fn format_body(epoch: Epoch) -> String {
@@ -119,6 +117,20 @@ mod test {
 
             assert_eq!(epoch, expected);
         }
+    }
+
+    #[test]
+    fn datetime_formatting() {
+        let epoch = Epoch::from_str("2009-01-08T00:00:00 UTC").unwrap();
+
+        // 6I6: identical to the map epochs, and reversible
+        let header = format_header(epoch);
+        assert_eq!(header, "  2009     1     8     0     0     0");
+        assert_eq!(header, format_body(epoch));
+        assert_eq!(parse_utc(&header).unwrap(), epoch);
+
+        let epoch = Epoch::from_str("2021-12-31T23:59:30 UTC").unwrap();
+        assert_eq!(format_header(epoch), "  2021    12    31    23    59    30");
     }
 
     // #[test]
