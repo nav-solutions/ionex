@@ -62,7 +62,7 @@ impl Record {
                 let (content, marker) = line_buf.split_at(60);
 
                 // COMMENTS are stored as is
-                if marker.contains("COMMENTS") {
+                if marker.contains("COMMENT") {
                     skip = true;
                     let comment = line_buf.split_at(60).0.trim_end();
                     comments.push(comment.to_string());

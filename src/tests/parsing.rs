@@ -28,3 +28,29 @@ fn repo_parsing() {
         }
     }
 }
+
+#[test]
+#[cfg(feature = "flate2")]
+fn record_comments_roundtrip() {
+    use std::io::{BufReader, BufWriter};
+
+    let mut ionex = IONEX::from_gzip_file("data/IONEX/V1/CKMG0020.22I.gz").unwrap();
+
+    ionex.comments = vec![
+        "first record comment".to_string(),
+        "second comment with numbers 12 34 56".to_string(),
+    ];
+
+    let mut buf = Vec::<u8>::new();
+    {
+        let mut writer = BufWriter::new(&mut buf);
+        ionex.format(&mut writer).unwrap();
+    }
+
+    let parsed = IONEX::parse(&mut BufReader::new(&buf[..])).unwrap();
+
+    // comments are formatted with the standard COMMENT marker
+    // and must be identified as such (never as data)
+    assert_eq!(parsed.comments, ionex.comments);
+    assert_eq!(parsed.record, ionex.record);
+}
